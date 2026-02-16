@@ -1,0 +1,192 @@
+# Example configuration.yaml entry for Crestron NVX Integration
+
+# Method 1: Via UI (Recommended)
+# Just add the integration through Settings -> Devices & Services
+
+# Method 2: Via YAML Configuration
+crestron_nvx:
+  devices:
+    # Conference Room Transmitter
+    - name: "Conference Room TX"
+      host: "192.168.1.100"
+      device_type: transmitter
+      username: admin
+      password: secure_password
+    
+    # Main Display Receiver
+    - name: "Main Display RX"
+      host: "192.168.1.101"
+      device_type: receiver
+      username: admin
+      password: secure_password
+    
+    # Projector Receiver
+    - name: "Projector RX"
+      host: "192.168.1.102"
+      device_type: receiver
+  
+  # Global scan interval (can be overridden per device)
+  scan_interval: 30
+
+
+# Example Automations
+
+automation:
+  # Auto-switch displays when meeting starts
+  - alias: "Meeting Room - Switch to Presentation"
+    trigger:
+      - platform: calendar
+        event: start
+        entity_id: calendar.meeting_room
+    condition:
+      - condition: state
+        entity_id: sensor.conference_room_tx_signal_status
+        state: "detected"
+    action:
+      - service: select.select_option
+        target:
+          entity_id: 
+            - select.main_display_rx_stream_source
+            - select.projector_rx_stream_source
+        data:
+          option: "Conference Room TX"
+      - delay: "00:00:02"
+      - service: button.press
+        target:
+          entity_id:
+            - button.main_display_rx_cec_power_on
+            - button.projector_rx_cec_power_on
+  
+  # Power off displays when meeting ends
+  - alias: "Meeting Room - Power Off After Meeting"
+    trigger:
+      - platform: calendar
+        event: end
+        entity_id: calendar.meeting_room
+    action:
+      - delay: "00:05:00"  # 5 minute grace period
+      - service: button.press
+        target:
+          entity_id:
+            - button.main_display_rx_cec_power_off
+            - button.projector_rx_cec_power_off
+  
+  # Alert when signal is lost
+  - alias: "Alert on Signal Loss"
+    trigger:
+      - platform: state
+        entity_id: sensor.main_display_rx_signal_status
+        to: "no_signal"
+        for: "00:01:00"
+    action:
+      - service: notify.mobile_app
+        data:
+          title: "AV Alert"
+          message: "Main Display has lost video signal"
+  
+  # Auto-adjust based on resolution
+  - alias: "Log Resolution Changes"
+    trigger:
+      - platform: state
+        entity_id: sensor.main_display_rx_resolution
+    action:
+      - service: logbook.log
+        data:
+          name: "Display Resolution"
+          message: "Changed to {{ states('sensor.main_display_rx_resolution') }}"
+
+
+# Example Scripts
+
+script:
+  # Quick switch to laptop input
+  switch_to_laptop:
+    alias: "Switch All Displays to Laptop"
+    icon: mdi:laptop
+    sequence:
+      - service: select.select_option
+        target:
+          entity_id:
+            - select.main_display_rx_stream_source
+            - select.projector_rx_stream_source
+        data:
+          option: "Laptop TX"
+  
+  # Quick switch to camera
+  switch_to_camera:
+    alias: "Switch All Displays to Camera"
+    icon: mdi:video
+    sequence:
+      - service: select.select_option
+        target:
+          entity_id:
+            - select.main_display_rx_stream_source
+            - select.projector_rx_stream_source
+        data:
+          option: "Camera TX"
+  
+  # Power cycle display
+  power_cycle_display:
+    alias: "Power Cycle Display"
+    icon: mdi:restart
+    sequence:
+      - service: button.press
+        target:
+          entity_id: button.main_display_rx_cec_power_off
+      - delay: "00:00:05"
+      - service: button.press
+        target:
+          entity_id: button.main_display_rx_cec_power_on
+
+
+# Example Sensor Templates
+
+sensor:
+  - platform: template
+    sensors:
+      av_system_health:
+        friendly_name: "AV System Health"
+        value_template: >
+          {% set signal = states('sensor.main_display_rx_signal_status') %}
+          {% set network = states('sensor.main_display_rx_network_status') %}
+          {% if signal == 'detected' and network == 'connected' %}
+            Healthy
+          {% elif signal == 'no_signal' %}
+            No Signal
+          {% elif network == 'disconnected' %}
+            Network Issue
+          {% else %}
+            Unknown
+          {% endif %}
+        icon_template: >
+          {% set signal = states('sensor.main_display_rx_signal_status') %}
+          {% if signal == 'detected' %}
+            mdi:check-circle
+          {% else %}
+            mdi:alert-circle
+          {% endif %}
+
+
+# Example Input Select for Manual Control
+
+input_select:
+  conference_room_source:
+    name: Conference Room Video Source
+    options:
+      - Laptop
+      - Camera
+      - Document Camera
+      - Wireless Presentation
+    icon: mdi:video-input-hdmi
+
+automation:
+  - alias: "Sync Input Select with Stream"
+    trigger:
+      - platform: state
+        entity_id: input_select.conference_room_source
+    action:
+      - service: select.select_option
+        target:
+          entity_id: select.main_display_rx_stream_source
+        data:
+          option: "{{ trigger.to_state.state }} TX"

@@ -1,0 +1,8 @@
+{
+  "name": "Crestron NVX",
+  "content_in_root": false,
+  "filename": "crestron_nvx",
+  "render_readme": true,
+  "domains": ["sensor", "select", "button"],
+  "homeassistant": "2023.1.0"
+}

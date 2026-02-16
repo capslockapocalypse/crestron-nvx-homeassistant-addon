@@ -1,0 +1,54 @@
+# Services for Crestron NVX Integration
+
+send_cec_command:
+  name: Send CEC Command
+  description: Send a custom CEC command to a Crestron NVX device
+  fields:
+    entity_id:
+      name: Device
+      description: The Crestron NVX device to send the command to
+      required: true
+      selector:
+        entity:
+          integration: crestron_nvx
+          domain: sensor
+    command:
+      name: CEC Command
+      description: The CEC command to send (e.g., "ImageOn", "Standby", "VolumeUp")
+      required: true
+      example: "ImageOn"
+      selector:
+        text:
+
+subscribe_to_stream:
+  name: Subscribe to Stream
+  description: Manually subscribe a receiver to a specific stream ID
+  fields:
+    entity_id:
+      name: Receiver
+      description: The Crestron NVX receiver device
+      required: true
+      selector:
+        entity:
+          integration: crestron_nvx
+          domain: select
+    stream_id:
+      name: Stream ID
+      description: The stream ID or multicast address to subscribe to
+      required: true
+      example: "239.1.1.100"
+      selector:
+        text:
+
+refresh_subscriptions:
+  name: Refresh Subscriptions
+  description: Force an immediate refresh of available stream subscriptions
+  fields:
+    entity_id:
+      name: Receiver
+      description: The Crestron NVX receiver to refresh
+      required: true
+      selector:
+        entity:
+          integration: crestron_nvx
+          domain: select
