@@ -71,9 +71,10 @@ during setup - there's no manual selector, so it can't be misconfigured.
 - `sensor.<name>_network_status` - connected/disconnected, with `ip_address` attribute
 
 ### Select (receivers only)
-- `select.<name>_stream_source` - options are every source currently
-  discovered on the NVX network; selecting one switches video, audio, and
-  USB together
+- `select.<name>_stream_source` - options are "Off" plus every source
+  currently discovered on the NVX network; selecting a source switches
+  video, audio, and USB together, and selecting "Off" clears the route to
+  blank the output
 
 ### Event (transmitters only)
 - `event.<name>_cec_command` - fires `power_on` / `power_off` / `volume_up`

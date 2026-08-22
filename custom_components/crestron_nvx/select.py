@@ -13,6 +13,8 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
+OFF_OPTION = "Off"
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -41,6 +43,10 @@ class CrestronNVXStreamSelect(CoordinatorEntity, SelectEntity):
     directly either has no effect or leaves audio on the old source, since
     this fleet's audio is a separate breakaway subscription that only the
     AvRouting object keeps in sync with video.
+
+    Also offers an "Off" option, which clears VideoSource/AudioSource/
+    UsbSource to empty strings - confirmed live to blank the output cleanly
+    (no video/audio routed) rather than erroring or leaving the last frame.
     """
 
     def __init__(self, coordinator, device):
@@ -62,33 +68,36 @@ class CrestronNVXStreamSelect(CoordinatorEntity, SelectEntity):
 
     @property
     def options(self) -> list[str]:
-        """Return available source names."""
+        """Return available source names, plus Off."""
         names = [info.get("SessionName") for info in self._streams().values() if info.get("SessionName")]
-        return names or ["No sources available"]
+        return [OFF_OPTION, *names]
 
     @property
     def current_option(self) -> str | None:
-        """Return the currently routed source name."""
+        """Return the currently routed source name, or Off."""
         route = (self.coordinator.data or {}).get("route")
         if not route:
             return None
         current_uid = route.get("VideoSource")
+        if not current_uid:
+            return OFF_OPTION
         stream = self._streams().get(current_uid)
         if stream:
             return stream.get("SessionName")
-        return f"Unknown ({current_uid})" if current_uid else None
+        return f"Unknown ({current_uid})"
 
     async def async_select_option(self, option: str) -> None:
-        """Switch to the selected source."""
-        target_uid = None
-        for uid, info in self._streams().items():
-            if info.get("SessionName") == option:
-                target_uid = uid
-                break
-
-        if target_uid is None:
-            _LOGGER.error("Could not find source UID for option: %s", option)
-            return
+        """Switch to the selected source, or clear routing if Off."""
+        if option == OFF_OPTION:
+            target_uid = ""
+        else:
+            target_uid = next(
+                (uid for uid, info in self._streams().items() if info.get("SessionName") == option),
+                None,
+            )
+            if target_uid is None:
+                _LOGGER.error("Could not find source UID for option: %s", option)
+                return
 
         success = await self.device.set_route(target_uid)
         if success:

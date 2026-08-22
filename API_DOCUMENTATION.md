@@ -120,6 +120,11 @@ POST /Device/AvRouting/Routes/0
 }
 ```
 
+Setting all three fields to an **empty string** (`""`) clears the route -
+confirmed live to cleanly blank the output (no video/audio routed) rather
+than erroring or leaving the last frame frozen. This is how the integration
+implements the select entity's "Off" option.
+
 ### CEC - inbound listening, not outbound control
 
 There is no `CecControl.Type` preset object on this firmware (a direct GET
