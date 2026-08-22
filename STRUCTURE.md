@@ -4,29 +4,29 @@ This repository follows the Home Assistant custom component standard structure:
 
 ```
 crestron-nvx-homeassistant-addon/
-├── .gitignore                      # Git ignore rules
-├── LICENSE                         # MIT License
-├── README.md                       # Main documentation
-├── VERSION                         # Version tracking
-├── hacs.json                       # HACS metadata
-├── info.md                         # HACS store description
-├── INSTALLATION.md                 # Installation guide
-├── API_DOCUMENTATION.md            # Crestron API reference
-├── configuration_example.yaml      # Example configurations
+├── .env                             # Real device creds for test_live.py (gitignored)
+├── .gitignore                       # Git ignore rules
+├── LICENSE                          # MIT License
+├── README.md                        # Main documentation
+├── VERSION                          # Version tracking
+├── hacs.json                        # HACS metadata
+├── info.md                          # HACS store description
+├── INSTALLATION.md                  # Installation guide
+├── API_DOCUMENTATION.md             # Verified Crestron DM NVX REST API reference
+├── test_live.py                     # Manual regression harness against real hardware
 └── custom_components/
-    └── crestron_nvx/              # Integration module
-        ├── __init__.py             # Integration setup
-        ├── manifest.json           # Integration metadata
-        ├── strings.json            # UI strings
-        ├── const.py                # Constants
-        ├── config_flow.py          # Config flow (UI setup)
-        ├── crestron_nvx_api.py     # API client
-        ├── sensor.py               # Sensor entities
-        ├── select.py               # Select entities (stream switching)
-        ├── button.py               # Button entities (CEC controls)
-        ├── services.yaml           # Custom services
+    └── crestron_nvx/                # Integration module
+        ├── __init__.py              # Integration setup, DataUpdateCoordinator
+        ├── manifest.json            # Integration metadata
+        ├── strings.json             # UI strings
+        ├── const.py                 # Constants
+        ├── config_flow.py           # Config flow (UI setup, auto-detects device role)
+        ├── crestron_nvx_api.py      # Real DM NVX REST API client (auth, AvRouting, CEC decode)
+        ├── sensor.py                # Status sensors (all devices)
+        ├── select.py                # Stream source select (receivers, via AvRouting)
+        ├── event.py                 # CEC command listener (transmitters, via Longpoll)
         └── translations/
-            └── en.json             # English translations
+            └── en.json              # English translations
 ```
 
 ## Installation

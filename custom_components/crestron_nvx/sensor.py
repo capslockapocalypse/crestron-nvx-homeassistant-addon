@@ -1,24 +1,13 @@
 """Sensor platform for Crestron NVX."""
 from __future__ import annotations
 
-from homeassistant.components.sensor import (
-    SensorEntity,
-    SensorDeviceClass,
-    SensorStateClass,
-)
+from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import (
-    DOMAIN,
-    ATTR_RESOLUTION,
-    ATTR_SIGNAL_DETECTED,
-    ATTR_HDCP_ACTIVE,
-    ATTR_AUDIO_PRESENT,
-    ATTR_NETWORK_CONNECTED,
-)
+from .const import DOMAIN
 
 
 async def async_setup_entry(
@@ -34,15 +23,14 @@ async def async_setup_entry(
     entities = []
     for device_name, coordinator in coordinators.items():
         device = api.get_device(device_name)
-        
-        # Add sensors for all devices
-        entities.extend([
-            CrestronNVXResolutionSensor(coordinator, device),
-            CrestronNVXSignalSensor(coordinator, device),
-            CrestronNVXHDCPSensor(coordinator, device),
-            CrestronNVXAudioSensor(coordinator, device),
-            CrestronNVXNetworkSensor(coordinator, device),
-        ])
+        entities.extend(
+            [
+                CrestronNVXResolutionSensor(coordinator, device),
+                CrestronNVXVideoConnectionSensor(coordinator, device),
+                CrestronNVXHDCPSensor(coordinator, device),
+                CrestronNVXNetworkSensor(coordinator, device),
+            ]
+        )
 
     async_add_entities(entities)
 
@@ -55,10 +43,10 @@ class CrestronNVXSensorBase(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self.device = device
         self._attr_device_info = {
-            "identifiers": {(DOMAIN, device.name)},
+            "identifiers": {(DOMAIN, device.host)},
             "name": device.name,
             "manufacturer": "Crestron",
-            "model": f"NVX {device.device_type.capitalize()}",
+            "model": f"NVX {device.device_mode}",
         }
 
 
@@ -69,78 +57,65 @@ class CrestronNVXResolutionSensor(CrestronNVXSensorBase):
         """Initialize the resolution sensor."""
         super().__init__(coordinator, device)
         self._attr_name = f"{device.name} Resolution"
-        self._attr_unique_id = f"{device.name}_resolution"
+        self._attr_unique_id = f"{device.host}_resolution"
         self._attr_icon = "mdi:video"
 
     @property
     def native_value(self):
-        """Return the resolution."""
-        return self.coordinator.data.get(ATTR_RESOLUTION, "Unknown")
-
-    @property
-    def extra_state_attributes(self):
-        """Return additional attributes."""
-        return {
-            "device_type": self.device.device_type,
-            "host": self.device.host,
-        }
+        """Return the resolution as e.g. '1920x1080@60'."""
+        video = (self.coordinator.data or {}).get("video")
+        if not video or not video.get("horizontal_resolution"):
+            return "Unknown"
+        return (
+            f"{video['horizontal_resolution']}x{video['vertical_resolution']}"
+            f"@{video['frames_per_second']}"
+        )
 
 
-class CrestronNVXSignalSensor(CrestronNVXSensorBase):
-    """Sensor for signal detection status."""
+class CrestronNVXVideoConnectionSensor(CrestronNVXSensorBase):
+    """Sensor for HDMI signal/sink connection status.
+
+    Transmitters report whether a source is sending sync on their HDMI
+    input; receivers report whether a display is connected on their HDMI
+    output. Different question, same shape - one sensor, role-aware label.
+    """
 
     def __init__(self, coordinator, device):
-        """Initialize the signal sensor."""
+        """Initialize the sensor."""
         super().__init__(coordinator, device)
-        self._attr_name = f"{device.name} Signal Status"
-        self._attr_unique_id = f"{device.name}_signal_status"
-        self._attr_icon = "mdi:signal"
-        self._attr_device_class = SensorDeviceClass.ENUM
-        self._attr_options = ["detected", "no_signal"]
+        label = "Sink Connected" if device.is_receiver else "Signal Detected"
+        self._attr_name = f"{device.name} {label}"
+        self._attr_unique_id = f"{device.host}_video_connected"
+        self._attr_icon = "mdi:video-input-hdmi"
 
     @property
     def native_value(self):
-        """Return the signal status."""
-        detected = self.coordinator.data.get(ATTR_SIGNAL_DETECTED, False)
-        return "detected" if detected else "no_signal"
+        """Return connected/disconnected."""
+        video = (self.coordinator.data or {}).get("video")
+        connected = bool(video and video.get("connected"))
+        return "connected" if connected else "disconnected"
 
 
 class CrestronNVXHDCPSensor(CrestronNVXSensorBase):
-    """Sensor for HDCP status."""
+    """Sensor for HDCP state.
+
+    The device reports a real string state (e.g. "Authenticated",
+    "Non-HDCPSource", "NoHDCPReceiverInDownstream"), not a simple boolean -
+    exposed as-is rather than collapsed to active/inactive.
+    """
 
     def __init__(self, coordinator, device):
         """Initialize the HDCP sensor."""
         super().__init__(coordinator, device)
-        self._attr_name = f"{device.name} HDCP Status"
-        self._attr_unique_id = f"{device.name}_hdcp_status"
+        self._attr_name = f"{device.name} HDCP State"
+        self._attr_unique_id = f"{device.host}_hdcp_state"
         self._attr_icon = "mdi:shield-lock"
-        self._attr_device_class = SensorDeviceClass.ENUM
-        self._attr_options = ["active", "inactive"]
 
     @property
     def native_value(self):
-        """Return the HDCP status."""
-        active = self.coordinator.data.get(ATTR_HDCP_ACTIVE, False)
-        return "active" if active else "inactive"
-
-
-class CrestronNVXAudioSensor(CrestronNVXSensorBase):
-    """Sensor for audio presence."""
-
-    def __init__(self, coordinator, device):
-        """Initialize the audio sensor."""
-        super().__init__(coordinator, device)
-        self._attr_name = f"{device.name} Audio Status"
-        self._attr_unique_id = f"{device.name}_audio_status"
-        self._attr_icon = "mdi:volume-high"
-        self._attr_device_class = SensorDeviceClass.ENUM
-        self._attr_options = ["present", "absent"]
-
-    @property
-    def native_value(self):
-        """Return the audio status."""
-        present = self.coordinator.data.get(ATTR_AUDIO_PRESENT, False)
-        return "present" if present else "absent"
+        """Return the raw HDCP state string."""
+        video = (self.coordinator.data or {}).get("video")
+        return (video or {}).get("hdcp_state") or "Unknown"
 
 
 class CrestronNVXNetworkSensor(CrestronNVXSensorBase):
@@ -150,13 +125,18 @@ class CrestronNVXNetworkSensor(CrestronNVXSensorBase):
         """Initialize the network sensor."""
         super().__init__(coordinator, device)
         self._attr_name = f"{device.name} Network Status"
-        self._attr_unique_id = f"{device.name}_network_status"
+        self._attr_unique_id = f"{device.host}_network_status"
         self._attr_icon = "mdi:ethernet"
-        self._attr_device_class = SensorDeviceClass.ENUM
-        self._attr_options = ["connected", "disconnected"]
 
     @property
     def native_value(self):
-        """Return the network status."""
-        connected = self.coordinator.data.get(ATTR_NETWORK_CONNECTED, False)
+        """Return connected/disconnected."""
+        ethernet = (self.coordinator.data or {}).get("ethernet")
+        connected = bool(ethernet and ethernet.get("connected"))
         return "connected" if connected else "disconnected"
+
+    @property
+    def extra_state_attributes(self):
+        """Return the IP address as an attribute."""
+        ethernet = (self.coordinator.data or {}).get("ethernet") or {}
+        return {"ip_address": ethernet.get("ip_address")}

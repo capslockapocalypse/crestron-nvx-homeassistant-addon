@@ -3,19 +3,20 @@
     "step": {
       "user": {
         "title": "Configure Crestron NVX Device",
-        "description": "Add a Crestron NVX Transmitter or Receiver",
+        "description": "Add a Crestron NVX Transmitter or Receiver. Role (Transmitter/Receiver) is detected automatically from the device.",
         "data": {
           "name": "Device Name",
           "host": "IP Address or Hostname",
-          "device_type": "Device Type",
-          "username": "Username (Optional)",
-          "password": "Password (Optional)",
+          "username": "Username",
+          "password": "Password",
+          "verify_ssl": "Verify SSL Certificate",
           "scan_interval": "Update Interval (seconds)"
         }
       }
     },
     "error": {
       "cannot_connect": "Failed to connect to the device. Please check the IP address and network connection.",
+      "invalid_auth": "Invalid username or password. Please check your credentials.",
       "unknown": "An unexpected error occurred. Please try again."
     },
     "abort": {

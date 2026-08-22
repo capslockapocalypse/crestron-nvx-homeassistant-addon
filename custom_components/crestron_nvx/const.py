@@ -4,17 +4,18 @@ DOMAIN = "crestron_nvx"
 
 # Configuration
 CONF_DEVICES = "devices"
-CONF_DEVICE_TYPE = "device_type"
 CONF_SCAN_INTERVAL = "scan_interval"
+CONF_VERIFY_SSL = "verify_ssl"
 
-# Device types
-DEVICE_TYPE_TRANSMITTER = "transmitter"
-DEVICE_TYPE_RECEIVER = "receiver"
-
-# Attributes
-ATTR_RESOLUTION = "resolution"
-ATTR_SIGNAL_DETECTED = "signal_detected"
-ATTR_HDCP_ACTIVE = "hdcp_active"
-ATTR_AUDIO_PRESENT = "audio_present"
+# Coordinator data keys
+ATTR_HORIZONTAL_RESOLUTION = "horizontal_resolution"
+ATTR_VERTICAL_RESOLUTION = "vertical_resolution"
+ATTR_FRAMES_PER_SECOND = "frames_per_second"
+ATTR_VIDEO_CONNECTED = "video_connected"
+ATTR_HDCP_STATE = "hdcp_state"
 ATTR_NETWORK_CONNECTED = "network_connected"
-ATTR_SUBSCRIPTIONS = "subscriptions"
+ATTR_IP_ADDRESS = "ip_address"
+
+# CEC event entity (transmitters only - listens to Apple-TV-style remote
+# presses arriving over HDMI-CEC on the HDMI input, see crestron_nvx_api.py)
+CEC_EVENT_TYPES = ["power_on", "power_off", "volume_up", "volume_down", "mute"]

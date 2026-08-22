@@ -3,15 +3,16 @@
 ## Prerequisites
 
 - Home Assistant 2023.1 or newer
-- Crestron NVX Transmitters and/or Receivers on your network
-- Network connectivity between Home Assistant and NVX devices
-- (Optional) Credentials for NVX devices if authentication is enabled
+- Crestron NVX Transmitters and/or Receivers on your network, with
+  **authentication enabled on the device** (the real REST API requires it -
+  see [API_DOCUMENTATION.md](API_DOCUMENTATION.md))
+- Network connectivity from Home Assistant to each device on **port 443
+  (HTTPS)** - the API has no unauthenticated HTTP mode
+- Admin credentials for each device
 
 ## Installation Methods
 
 ### Option 1: HACS Installation (Recommended)
-
-HACS (Home Assistant Community Store) is the easiest way to install and manage custom integrations.
 
 #### Step 1: Install HACS
 If you haven't already installed HACS, follow the instructions at: https://hacs.xyz/docs/setup/download
@@ -27,231 +28,103 @@ If you haven't already installed HACS, follow the instructions at: https://hacs.
 
 #### Step 3: Install Integration
 1. Find "Crestron NVX" in the HACS integrations list
-2. Click on it
-3. Click "Download"
-4. Select the latest version
-5. Restart Home Assistant
+2. Click on it, then "Download"
+3. Restart Home Assistant
 
 ### Option 2: Manual Installation
 
-#### Step 1: Download Integration Files
-Download all files from this repository to your local machine.
+Copy `custom_components/crestron_nvx/` from this repository into your Home
+Assistant config directory, so you end up with:
 
-#### Step 2: Copy Files to Home Assistant
-1. Connect to your Home Assistant instance (via SSH, Samba, or file editor)
-2. Navigate to your configuration directory (usually `/config/`)
-3. Create a `custom_components` folder if it doesn't exist
-4. Create a `crestron_nvx` folder inside `custom_components`
-5. Copy all integration files into `/config/custom_components/crestron_nvx/`
-
-Your directory structure should look like:
 ```
 /config/
-├── custom_components/
-│   └── crestron_nvx/
-│       ├── __init__.py
-│       ├── button.py
-│       ├── config_flow.py
-│       ├── const.py
-│       ├── crestron_nvx_api.py
-│       ├── manifest.json
-│       ├── select.py
-│       ├── sensor.py
-│       ├── services.yaml
-│       └── strings.json
+└── custom_components/
+    └── crestron_nvx/
+        ├── __init__.py
+        ├── config_flow.py
+        ├── const.py
+        ├── crestron_nvx_api.py
+        ├── event.py
+        ├── manifest.json
+        ├── select.py
+        ├── sensor.py
+        ├── strings.json
+        └── translations/
+            └── en.json
 ```
 
-#### Step 3: Restart Home Assistant
-Restart Home Assistant to load the new integration.
+Then restart Home Assistant.
 
 ## Configuration
 
-### Adding Devices via UI (Recommended)
+There is **no YAML configuration** - set up each device through the UI:
 
-1. **Navigate to Integrations**
-   - Go to Settings → Devices & Services
-   - Click the "+ ADD INTEGRATION" button
-
-2. **Search for Crestron NVX**
-   - Type "Crestron NVX" in the search box
-   - Click on the integration when it appears
-
-3. **Configure First Device**
-   Fill in the following information:
-   - **Device Name**: Give your device a friendly name (e.g., "Conference Room Display")
-   - **IP Address**: Enter the IP address of your NVX device (e.g., "192.168.1.100")
-   - **Device Type**: Select either "Transmitter" or "Receiver"
-   - **Username** (optional): If authentication is enabled, enter username
-   - **Password** (optional): If authentication is enabled, enter password
-   - **Update Interval**: How often to poll the device (default: 30 seconds)
-
-4. **Add More Devices**
-   - Repeat the process for each NVX device you want to add
-   - Each device will be added as a separate integration instance
-
-### Adding Devices via YAML (Alternative)
-
-If you prefer YAML configuration, add this to your `configuration.yaml`:
-
-```yaml
-crestron_nvx:
-  devices:
-    - name: "Conference Room TX"
-      host: "192.168.1.100"
-      device_type: transmitter
-      username: admin        # Optional
-      password: password     # Optional
-    
-    - name: "Main Display RX"
-      host: "192.168.1.101"
-      device_type: receiver
-      username: admin        # Optional
-      password: password     # Optional
-  
-  scan_interval: 30  # Optional: Global update interval in seconds
-```
-
-After adding to YAML:
-1. Check configuration: Developer Tools → YAML → Check Configuration
-2. Restart Home Assistant
+1. Settings → Devices & Services → **+ Add Integration**
+2. Search for "Crestron NVX"
+3. Fill in:
+   - **Device Name** - friendly name, used to name every entity for this device
+   - **IP Address or Hostname**
+   - **Username** / **Password**
+   - **Verify SSL Certificate** - leave unchecked unless you've installed a
+     trusted cert (devices ship with self-signed certs)
+   - **Update Interval** - status polling interval, seconds (default 30)
+4. Repeat for each device - one config entry per device. Transmitter vs.
+   receiver role is detected automatically from the device; there's nothing
+   to select.
 
 ## Verifying Installation
 
-### Check Device Status
+1. **Settings → Devices & Services → Crestron NVX** - each device you added
+   should be listed.
+2. **Developer Tools → States**, filter by `crestron_nvx` - you should see:
+   - `sensor.<name>_resolution`, `sensor.<name>_hdcp_state`,
+     `sensor.<name>_network_status`, and `sensor.<name>_signal_detected`
+     (transmitters) or `sensor.<name>_sink_connected` (receivers)
+   - `select.<name>_stream_source` on receivers only
+   - `event.<name>_cec_command` on transmitters only
+3. **Test the select entity** (receivers) - pick a different source from the
+   dropdown and confirm the connected display actually switches.
+4. **Test the event entity** (transmitters) - press a button on the
+   connected source's remote (see the CEC troubleshooting note in
+   [README.md](README.md) re: Apple TV's Volume Control setting) and watch
+   for the event in Developer Tools → Events, or use it directly as a device
+   trigger in an automation.
 
-1. **Navigate to Devices**
-   - Go to Settings → Devices & Services
-   - Click on "Crestron NVX"
-   - You should see all your configured devices
+## Troubleshooting
 
-2. **Check Entities**
-   Each device should create multiple entities:
-   - **Sensors**: Resolution, Signal Status, HDCP Status, Audio Status, Network Status
-   - **Select** (Receivers only): Stream Source dropdown
-   - **Buttons**: CEC controls (Power On, Power Off, Volume Up/Down, Mute)
+### Integration not showing up
+- Confirm files are at `/config/custom_components/crestron_nvx/`
+- Check `manifest.json` is valid JSON
+- Restart Home Assistant again, then check Settings → System → Logs
 
-3. **View Entity States**
-   - Go to Developer Tools → States
-   - Filter by "crestron_nvx"
-   - All entities should show current values
+### "Cannot connect" during setup
+- Confirm the device is reachable: try `https://<device-ip>/userlogin.html`
+  in a browser first (accept the self-signed cert warning) - if that
+  doesn't load, it's a network/firewall issue, not this integration
+- Confirm authentication is actually enabled on the device - the API has no
+  unauthenticated mode to fall back to
+- Check port 443 isn't blocked between Home Assistant and the device
 
-### Test Functionality
+### "Invalid auth" during setup
+- Double check username/password against what the device's own web UI
+  accepts
 
-1. **Test Status Sensors**
-   - Check that resolution sensor shows correct value
-   - Verify signal status matches actual state
-   - Confirm network status shows "connected"
+### No sources in the Stream Source dropdown
+- The source transmitter needs to actually be powered on and transmitting
+  before it's discoverable
+- Confirm receivers and transmitters are on the same network segment /
+  multicast routing and IGMP snooping are configured correctly between them
 
-2. **Test CEC Controls** (if supported by your display)
-   - Try the Power On button
-   - Try the Volume Up/Down buttons
-   - Verify display responds to commands
+## Updating
 
-3. **Test Stream Switching** (Receivers only)
-   - Open the Stream Source dropdown
-   - Select a different stream
-   - Verify the receiver switches to the new source
+**HACS**: HACS will notify you of updates; click "Update" and restart Home
+Assistant.
 
-## Troubleshooting Installation
-
-### Integration Not Showing Up
-
-**Problem**: Can't find "Crestron NVX" when searching for integrations.
-
-**Solutions**:
-1. Verify files are in correct location: `/config/custom_components/crestron_nvx/`
-2. Check that `manifest.json` exists and is valid JSON
-3. Restart Home Assistant again
-4. Check Home Assistant logs for errors: Settings → System → Logs
-
-### Configuration Errors
-
-**Problem**: Integration shows errors during setup.
-
-**Solutions**:
-1. Verify NVX device IP address is correct
-2. Test network connectivity: `ping <device_ip>` from Home Assistant host
-3. Ensure device is powered on and responding
-4. Check credentials if authentication is required
-5. Review Home Assistant logs for specific error messages
-
-### Entities Not Created
-
-**Problem**: Device added but no entities appear.
-
-**Solutions**:
-1. Wait 30 seconds for first update cycle
-2. Force entity refresh: Developer Tools → States → Reload
-3. Check coordinator status in logs
-4. Verify device REST API is accessible
-5. Try increasing scan interval to 60 seconds
-
-### "Cannot Connect" Error
-
-**Problem**: Setup fails with "cannot connect" error.
-
-**Solutions**:
-1. Verify IP address is correct and reachable
-2. Check firewall rules between Home Assistant and NVX device
-3. Ensure NVX REST API is enabled on device
-4. Try accessing `http://<device_ip>/Device/DeviceInfo` in a browser
-5. Check if authentication credentials are required
-
-## Network Configuration
-
-### Required Ports
-- **HTTP**: Port 80 (default REST API port)
-- **HTTPS**: Port 443 (if SSL is configured)
-
-### Firewall Rules
-Allow traffic from Home Assistant to NVX devices on port 80/443.
-
-### Multicast Requirements (for stream switching)
-- Receivers need to be on the same network segment as transmitters
-- IGMP snooping should be properly configured on network switches
-- Multicast routing must be enabled between VLANs if devices are separated
-
-## Next Steps
-
-After successful installation:
-
-1. **Create Automations**
-   - See `configuration_example.yaml` for automation ideas
-   - Create scenes for common AV configurations
-
-2. **Build Dashboard**
-   - Add entities to Lovelace dashboards
-   - Create custom cards for AV control
-
-3. **Set Up Notifications**
-   - Configure alerts for signal loss
-   - Monitor device health
-
-4. **Integrate with Other Systems**
-   - Link with calendar for meeting room automation
-   - Connect to presence detection
-   - Integrate with lighting control
-
-## Getting Help
-
-- **GitHub Issues**: Report bugs or request features
-- **Home Assistant Community**: Ask questions in the forums
-- **Documentation**: Check README.md for detailed information
-
-## Updating the Integration
-
-### Via HACS
-1. HACS will notify you of updates
-2. Click "Update" when a new version is available
-3. Restart Home Assistant
-
-### Manual Update
-1. Download new version files
-2. Replace files in `/config/custom_components/crestron_nvx/`
-3. Restart Home Assistant
+**Manual**: replace the files in `/config/custom_components/crestron_nvx/`
+and restart Home Assistant.
 
 ## Uninstalling
 
-1. Remove integration: Settings → Devices & Services → Crestron NVX → Delete
-2. Delete folder: `/config/custom_components/crestron_nvx/`
+1. Settings → Devices & Services → Crestron NVX → Delete (for each device)
+2. Delete `/config/custom_components/crestron_nvx/`
 3. Restart Home Assistant

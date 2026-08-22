@@ -4,21 +4,15 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import aiohttp
 import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.data_entry_flow import FlowResult
-import homeassistant.helpers.config_validation as cv
 
-from .const import (
-    DOMAIN,
-    CONF_DEVICE_TYPE,
-    CONF_SCAN_INTERVAL,
-    DEVICE_TYPE_RECEIVER,
-    DEVICE_TYPE_TRANSMITTER,
-)
-from .crestron_nvx_api import CrestronNVXDevice
+from .const import CONF_SCAN_INTERVAL, CONF_VERIFY_SSL, DOMAIN
+from .crestron_nvx_api import CrestronNVXAuthError, CrestronNVXConnectionError, CrestronNVXDevice
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,9 +20,9 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_NAME): str,
         vol.Required(CONF_HOST): str,
-        vol.Required(CONF_DEVICE_TYPE): vol.In([DEVICE_TYPE_TRANSMITTER, DEVICE_TYPE_RECEIVER]),
-        vol.Optional(CONF_USERNAME): str,
-        vol.Optional(CONF_PASSWORD): str,
+        vol.Required(CONF_USERNAME): str,
+        vol.Required(CONF_PASSWORD): str,
+        vol.Optional(CONF_VERIFY_SSL, default=False): bool,
         vol.Optional(CONF_SCAN_INTERVAL, default=30): vol.All(
             vol.Coerce(int), vol.Range(min=10, max=300)
         ),
@@ -48,41 +42,45 @@ class CrestronNVXConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            # Validate the connection
-            device = CrestronNVXDevice(
-                host=user_input[CONF_HOST],
-                device_type=user_input[CONF_DEVICE_TYPE],
-                name=user_input[CONF_NAME],
-                username=user_input.get(CONF_USERNAME),
-                password=user_input.get(CONF_PASSWORD),
-            )
-
+            session = aiohttp.ClientSession(cookie_jar=aiohttp.CookieJar(unsafe=True))
             try:
-                # Try to get device info to validate connection
-                device_info = await device.get_device_info()
-                await device.close()
-
-                if device_info is None:
+                device = CrestronNVXDevice(
+                    host=user_input[CONF_HOST],
+                    username=user_input[CONF_USERNAME],
+                    password=user_input[CONF_PASSWORD],
+                    session=session,
+                    verify_ssl=user_input[CONF_VERIFY_SSL],
+                )
+                try:
+                    await device.login()
+                except CrestronNVXAuthError:
+                    errors["base"] = "invalid_auth"
+                except CrestronNVXConnectionError:
                     errors["base"] = "cannot_connect"
                 else:
-                    # Create a unique ID based on host and name
-                    await self.async_set_unique_id(
-                        f"{user_input[CONF_HOST]}_{user_input[CONF_NAME]}"
-                    )
-                    self._abort_if_unique_id_configured()
+                    if device.device_mode is None:
+                        errors["base"] = "cannot_connect"
+                    else:
+                        await device.logout()
+                        await self.async_set_unique_id(
+                            f"{user_input[CONF_HOST]}_{user_input[CONF_NAME]}"
+                        )
+                        self._abort_if_unique_id_configured()
 
-                    return self.async_create_entry(
-                        title=user_input[CONF_NAME],
-                        data={
-                            "devices": [user_input],
-                            CONF_SCAN_INTERVAL: user_input.get(CONF_SCAN_INTERVAL, 30),
-                        },
-                    )
-
+                        return self.async_create_entry(
+                            title=user_input[CONF_NAME],
+                            data={
+                                "devices": [
+                                    {**user_input, "device_mode": device.device_mode}
+                                ],
+                                CONF_SCAN_INTERVAL: user_input[CONF_SCAN_INTERVAL],
+                            },
+                        )
             except Exception:  # pylint: disable=broad-except
-                _LOGGER.exception("Unexpected exception")
+                _LOGGER.exception("Unexpected exception validating Crestron NVX device")
                 errors["base"] = "unknown"
-                await device.close()
+            finally:
+                await session.close()
 
         return self.async_show_form(
             step_id="user",

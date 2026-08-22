@@ -1,0 +1,18 @@
+# Secrets / local test config
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Home Assistant test env (if used for manual testing)
+config/.storage/
+config/home-assistant.log
