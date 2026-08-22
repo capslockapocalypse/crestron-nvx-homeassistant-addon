@@ -11,6 +11,8 @@ hardware (DM-NVX-E30, DM-NVX-352, DM-NVX-350, DM-NVX-D30). See
 including a couple of things that aren't obvious from Crestron's own docs
 (the real source-switching mechanism, and the real CEC frame format).
 
+This entire addon is Claude Generated so use at your own risk. 
+
 ## Features
 
 ### All devices
