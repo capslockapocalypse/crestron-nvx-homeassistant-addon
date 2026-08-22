@@ -1,9 +1,9 @@
 {
   "domain": "crestron_nvx",
   "name": "Crestron NVX",
-  "documentation": "https://github.com/yourusername/crestron-nvx",
+  "documentation": "https://github.com/capslockapocalypse/crestron-nvx-homeassistant-addon",
   "requirements": ["aiohttp>=3.8.0"],
-  "codeowners": ["@yourusername"],
+  "codeowners": ["@capslockapocalypse"],
   "config_flow": true,
   "iot_class": "local_polling",
   "version": "1.0.0"

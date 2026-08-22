@@ -3,7 +3,7 @@
 This repository follows the Home Assistant custom component standard structure:
 
 ```
-crestron-nvx-home-assistant/
+crestron-nvx-homeassistant-addon/
 ├── .gitignore                      # Git ignore rules
 ├── LICENSE                         # MIT License
 ├── README.md                       # Main documentation
@@ -35,7 +35,7 @@ crestron-nvx-home-assistant/
 1. Open HACS
 2. Click "Integrations"
 3. Click the menu (⋮) → "Custom repositories"
-4. Add `https://github.com/capslockapocalypse/crestron-nvx-home-assistant`
+4. Add `https://github.com/capslockapocalypse/crestron-nvx-homeassistant-addon`
 5. Select category "Integration"
 6. Install "Crestron NVX"
 
@@ -48,7 +48,7 @@ crestron-nvx-home-assistant/
 
 ```bash
 # Clone repository
-git clone https://github.com/capslockapocalypse/crestron-nvx-home-assistant.git
+git clone https://github.com/capslockapocalypse/crestron-nvx-homeassistant-addon.git
 
 # Link to Home Assistant for testing
 ln -s $(pwd)/custom_components/crestron_nvx ~/.homeassistant/custom_components/

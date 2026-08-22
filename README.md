@@ -1,8 +1,8 @@
 # Crestron NVX Home Assistant Integration
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
-[![GitHub release](https://img.shields.io/github/release/capslockapocalypse/crestron-nvx-home-assistant.svg)](https://github.com/capslockapocalypse/crestron-nvx-home-assistant/releases)
-[![License](https://img.shields.io/github/license/capslockapocalypse/crestron-nvx-home-assistant.svg)](LICENSE)
+[![GitHub release](https://img.shields.io/github/release/capslockapocalypse/crestron-nvx-homeassistant-addon.svg)](https://github.com/capslockapocalypse/crestron-nvx-homeassistant-addon/releases)
+[![License](https://img.shields.io/github/license/capslockapocalypse/crestron-nvx-homeassistant-addon.svg)](LICENSE)
 
 A comprehensive Home Assistant integration for controlling Crestron NVX video over IP transmitters and receivers.
 
@@ -35,7 +35,7 @@ A comprehensive Home Assistant integration for controlling Crestron NVX video ov
 1. Open HACS in Home Assistant
 2. Go to "Integrations"
 3. Click the three dots in the top right and select "Custom repositories"
-4. Add this repository URL: `https://github.com/yourusername/crestron-nvx`
+4. Add this repository URL: `https://github.com/capslockapocalypse/crestron-nvx-homeassistant-addon`
 5. Category: Integration
 6. Click "Add"
 7. Find "Crestron NVX" in HACS and click "Download"
@@ -221,7 +221,7 @@ This integration uses the Crestron NVX REST API. The following endpoints are uti
 ## Support
 
 For issues, feature requests, or contributions:
-- GitHub Issues: https://github.com/yourusername/crestron-nvx/issues
+- GitHub Issues: https://github.com/capslockapocalypse/crestron-nvx-homeassistant-addon/issues
 - Home Assistant Community: https://community.home-assistant.io/
 
 ## License

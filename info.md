@@ -1,7 +1,7 @@
 {% if installed %}
 ## Changes in {{version}}
 
-Check the [release notes](https://github.com/capslockapocalypse/crestron-nvx-home-assistant/releases) for details.
+Check the [release notes](https://github.com/capslockapocalypse/crestron-nvx-homeassistant-addon/releases) for details.
 
 {% endif %}
 
@@ -40,10 +40,10 @@ Control your Crestron NVX video over IP transmitters and receivers directly from
 
 ### Documentation
 
-- [Installation Guide](https://github.com/capslockapocalypse/crestron-nvx-home-assistant/blob/master/INSTALLATION.md)
-- [API Documentation](https://github.com/capslockapocalypse/crestron-nvx-home-assistant/blob/master/API_DOCUMENTATION.md)
-- [Configuration Examples](https://github.com/capslockapocalypse/crestron-nvx-home-assistant/blob/master/configuration_example.yaml)
+- [Installation Guide](https://github.com/capslockapocalypse/crestron-nvx-homeassistant-addon/blob/master/INSTALLATION.md)
+- [API Documentation](https://github.com/capslockapocalypse/crestron-nvx-homeassistant-addon/blob/master/API_DOCUMENTATION.md)
+- [Configuration Examples](https://github.com/capslockapocalypse/crestron-nvx-homeassistant-addon/blob/master/configuration_example.yaml)
 
 ### Support
 
-Found a bug or have a feature request? [Open an issue](https://github.com/capslockapocalypse/crestron-nvx-home-assistant/issues)!
+Found a bug or have a feature request? [Open an issue](https://github.com/capslockapocalypse/crestron-nvx-homeassistant-addon/issues)!

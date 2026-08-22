@@ -21,7 +21,7 @@ If you haven't already installed HACS, follow the instructions at: https://hacs.
 2. Click on "Integrations"
 3. Click the three dots (⋮) in the top right corner
 4. Select "Custom repositories"
-5. Add the repository URL: `https://github.com/yourusername/crestron-nvx`
+5. Add the repository URL: `https://github.com/capslockapocalypse/crestron-nvx-homeassistant-addon`
 6. Select category: "Integration"
 7. Click "Add"
 
