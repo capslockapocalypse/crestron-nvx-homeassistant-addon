@@ -43,7 +43,11 @@ async def check_device(api: CrestronNVXAPI, host: str, username: str, password: 
         print(f"  LOGIN FAILED: {err}")
         return
 
-    print(f"  mode: {device.device_mode}")
+    print(f"  mode: {device.device_mode}  hdmi_in={device.hdmi_inputs} hdmi_out={device.hdmi_outputs}")
+
+    if device.hdmi_inputs > 0:
+        ds = await device.get_device_specific()
+        print(f"  VideoSource={ (ds or {}).get('VideoSource') } ActiveVideoSource={ (ds or {}).get('ActiveVideoSource') }")
 
     info = await device.get_device_info()
     if info:
@@ -62,6 +66,8 @@ async def check_device(api: CrestronNVXAPI, host: str, username: str, password: 
         print(f"  discovered streams: {[s.get('SessionName') for s in streams.values()]}")
         route = await device.get_current_route()
         print(f"  current route: {route}")
+        route_control = await device.get_route_control()
+        print(f"  route control: {route_control}")
 
     if device.is_transmitter:
         cec_raw = await device.get_cec_input_message()

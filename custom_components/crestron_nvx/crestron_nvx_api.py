@@ -92,6 +92,8 @@ class CrestronNVXDevice:
         self.username = username
         self.password = password
         self.device_mode: Optional[str] = None
+        self.hdmi_inputs = 0
+        self.hdmi_outputs = 0
         self._session = session
         self._ssl = None if verify_ssl else False
         self._base_url = f"https://{host}"
@@ -140,6 +142,23 @@ class CrestronNVXDevice:
 
         self._authenticated = True
         self.device_mode = await self.get_device_mode()
+        await self._load_port_config()
+
+    async def _load_port_config(self) -> None:
+        """Cache HDMI input/output counts - static for the device's lifetime.
+
+        Port count varies a lot across models even within one role (e.g. a
+        DM-NVX-352 transmitter has 2 HDMI inputs, a DM-NVX-E30 has 1), so
+        this is read once here rather than assumed, and used by entity
+        setup to decide whether input-switching entities make sense at all.
+        """
+        data = await self._request("DeviceCapabilities/PortConfig")
+        try:
+            port_config = data["Device"]["DeviceCapabilities"]["PortConfig"]
+        except (KeyError, TypeError):
+            return
+        self.hdmi_inputs = port_config.get("NumberOfHdmiInputs", 0)
+        self.hdmi_outputs = port_config.get("NumberOfHdmiOutputs", 0)
 
     async def logout(self) -> None:
         """End the session. Best-effort; errors are not fatal."""
@@ -284,13 +303,16 @@ class CrestronNVXDevice:
             return None
 
     async def set_route(self, source_uid: str) -> bool:
-        """Switch video, audio and USB together to the given DiscoveredStreams UID.
+        """Switch video to the given DiscoveredStreams UID.
 
-        This is the verified-working mechanism - confirmed live across three
-        real source switches. Writing StreamReceive/MulticastAddress or
-        StreamLocation directly either does nothing or leaves audio on the
-        old source, because this receiver's audio is a separate breakaway
-        subscription that only AvRouting knows how to keep in sync.
+        Deliberately writes VideoSource only. Audio/USB following is the
+        device's own job (AvRouting/RouteControl's
+        IsSecondaryAudioFollowsVideoEnabled / IsUsbFollowsVideoEnabled) -
+        confirmed live that with the audio flag on, writing VideoSource
+        alone is enough for AudioSource to update on its own. Explicitly
+        writing AudioSource here as well - which is what earlier versions
+        of this method did - would fight anyone who's turned audio-follow
+        off to route audio independently via set_audio_source().
         """
         body = {
             "Device": {
@@ -298,21 +320,87 @@ class CrestronNVXDevice:
                     "Routes": [
                         {
                             "VideoSource": source_uid,
-                            "AudioSource": source_uid,
-                            "UsbSource": source_uid,
                         }
                     ]
                 }
             }
         }
-        result = await self._request("AvRouting/Routes/0", method="POST", json_body=body)
-        if result is None:
-            return False
+        return self._post_ok(await self._request("AvRouting/Routes/0", method="POST", json_body=body))
+
+    async def set_route_off(self) -> bool:
+        """Clear video, audio and USB together - confirmed live to blank the output cleanly.
+
+        Unlike set_route(), this always clears all three regardless of the
+        audio-follows-video setting: "Off" is a deliberate full blank, not a
+        source switch, so lingering independent audio on the old source
+        would be surprising.
+        """
+        body = {
+            "Device": {
+                "AvRouting": {
+                    "Routes": [{"VideoSource": "", "AudioSource": "", "UsbSource": ""}]
+                }
+            }
+        }
+        return self._post_ok(await self._request("AvRouting/Routes/0", method="POST", json_body=body))
+
+    async def get_route_control(self) -> Optional[dict]:
+        """AvRouting-wide flags, notably IsSecondaryAudioFollowsVideoEnabled."""
+        data = await self._request("AvRouting/RouteControl")
         try:
-            status_id = result["Actions"][0]["Results"][0]["StatusId"]
+            return data["Device"]["AvRouting"]["RouteControl"]
+        except (KeyError, TypeError):
+            return None
+
+    async def set_audio_follows_video(self, enabled: bool) -> bool:
+        """Toggle whether AudioSource auto-tracks VideoSource on future switches.
+
+        When turning this on, also immediately syncs AudioSource to the
+        current VideoSource - the flag only affects future video switches,
+        so without this an already-independent audio source would keep
+        playing until the next video change.
+        """
+        body = {
+            "Device": {
+                "AvRouting": {"RouteControl": {"IsSecondaryAudioFollowsVideoEnabled": enabled}}
+            }
+        }
+        ok = self._post_ok(await self._request("AvRouting/RouteControl", method="POST", json_body=body))
+        if ok and enabled:
+            route = await self.get_current_route()
+            video_uid = (route or {}).get("VideoSource")
+            if video_uid:
+                ok = await self.set_audio_source(video_uid)
+        return ok
+
+    async def set_audio_source(self, source_uid: str) -> bool:
+        """Route audio only to the given DiscoveredStreams UID, independent of video."""
+        body = {"Device": {"AvRouting": {"Routes": [{"AudioSource": source_uid}]}}}
+        return self._post_ok(await self._request("AvRouting/Routes/0", method="POST", json_body=body))
+
+    async def get_device_specific(self) -> Optional[dict]:
+        """DeviceSpecific object - VideoSource/ActiveVideoSource used for HDMI input switching."""
+        data = await self._request("DeviceSpecific")
+        try:
+            return data["Device"]["DeviceSpecific"]
+        except (KeyError, TypeError):
+            return None
+
+    async def set_video_source(self, value: str) -> bool:
+        """Set DeviceSpecific.VideoSource - e.g. "Stream", "Input1", "Input2".
+
+        Used both for a receiver's local-HDMI-vs-stream switch and a
+        multi-input transmitter's HDMI input switch - same field either way.
+        """
+        body = {"Device": {"DeviceSpecific": {"VideoSource": value}}}
+        return self._post_ok(await self._request("DeviceSpecific", method="POST", json_body=body))
+
+    @staticmethod
+    def _post_ok(result: Optional[dict]) -> bool:
+        try:
+            return result["Actions"][0]["Results"][0]["StatusId"] == 0
         except (KeyError, TypeError, IndexError):
             return False
-        return status_id == 0
 
     async def get_cec_input_message(self) -> Optional[str]:
         """Raw base64 CEC frame most recently received on the HDMI input."""

@@ -14,7 +14,7 @@ from .crestron_nvx_api import CrestronNVXAPI, CrestronNVXDevice
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SELECT, Platform.EVENT]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SELECT, Platform.EVENT, Platform.SWITCH]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -77,9 +77,12 @@ class CrestronNVXDataUpdateCoordinator(DataUpdateCoordinator):
                 "video": await self.device.get_video_status(),
                 "ethernet": await self.device.get_ethernet_status(),
             }
+            if self.device.hdmi_inputs > 0:
+                data["device_specific"] = await self.device.get_device_specific()
             if self.device.is_receiver:
                 data["discovered_streams"] = await self.device.get_discovered_streams()
                 data["route"] = await self.device.get_current_route()
+                data["route_control"] = await self.device.get_route_control()
             return data
         except Exception as err:
             raise UpdateFailed(f"Error communicating with {self.device.host}: {err}") from err

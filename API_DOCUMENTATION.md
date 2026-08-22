@@ -63,6 +63,34 @@ All paths below are relative to `/Device/`.
 `"Transmitter"` or `"Receiver"` - read from the device itself rather than
 trusted from user config, since some models are field-switchable.
 
+### `DeviceCapabilities/PortConfig` (GET only)
+`NumberOfHdmiInputs`, `NumberOfHdmiOutputs`, `NumberOfDmInputs`,
+`NumberOfEthernetAdapters` - the authoritative source for how many physical
+ports a device has. This varies a lot even within one role: a DM-NVX-E30
+transmitter has 1 HDMI input, a DM-NVX-352 transmitter has 2; a DM-NVX-D30
+receiver has 0 local HDMI inputs, a DM-NVX-350 receiver has 2. Read once at
+login and used to decide whether input-switching select entities make sense
+for a given device at all.
+
+### `DeviceSpecific/VideoSource` (GET, POST)
+The source-mode selector: `"Stream"` (receive the network route configured
+in `AvRouting`) or `"Input1"` / `"Input2"` / etc. (a local HDMI input).
+Confirmed live: writing an `InputN` value switches a receiver to that local
+input; writing `"Stream"` switches it back to the network route *without*
+needing to re-write `AvRouting` - the existing route is remembered and
+resumed. `DeviceSpecific/ActiveVideoSource` (GET only) tracks the same value
+once it's been explicitly written, but the two fields aren't reliably in
+sync until then - a single-HDMI-input transmitter observed `VideoSource:
+None, ActiveVideoSource: "Input1"` (nothing to explicitly select on a
+single-input device), while a two-input transmitter observed `VideoSource:
+"Input1", ActiveVideoSource: None` (selection exists, but no signal is
+currently present on it). For the multi-input case this integration
+actually creates an entity for, `VideoSource` reads reliably, so that's the
+field used for both "what's currently selected" and for writing. Same field
+name is used for both a receiver's local-vs-stream switch and a multi-input
+transmitter's input-select - on a transmitter, `"Stream"` isn't a valid
+value, only `InputN`.
+
 ### `AudioVideoInputOutput/Inputs/0/Ports/0` (transmitters)
 Only port index 0 exists on every model tested. Top-level: `IsSyncDetected`
 (bool), `HorizontalResolution`, `VerticalResolution`, `FramesPerSecond`.
@@ -99,31 +127,42 @@ confirmed by live testing on real hardware:
   switch video, but on a receiver with audio breakaway configured
   (`DeviceSpecific.AudioMode: "Insert"`), audio stays on the old source -
   it's a separate stream subscription StreamReceive doesn't touch.
-- `POST AvRouting/Routes/0` with `VideoSource`, `AudioSource`, and
-  `UsbSource` all set to a `DiscoveredStreams` `UniqueId` **switches
-  everything together correctly**. Confirmed across multiple live source
-  changes with visual + audio confirmation. **Use this, not StreamReceive
-  directly.**
+- `POST AvRouting/Routes/0` with `VideoSource`, `AudioSource`, and/or
+  `UsbSource` set to a `DiscoveredStreams` `UniqueId` **switches sources
+  correctly** - confirmed across multiple live source changes with visual +
+  audio confirmation. **Use this, not StreamReceive directly.**
+- Every write response here comes back `"Operation": "SetPartial"`, and
+  it's true to its name: POSTing only one of the three fields (e.g. just
+  `AudioSource`) leaves the other two untouched - confirmed live. This is
+  how the integration implements independent audio routing.
 
 ```json
 POST /Device/AvRouting/Routes/0
-{
-  "Device": {
-    "AvRouting": {
-      "Routes": [{
-        "VideoSource": "00000000-0000-4002-0054-040440c30b06",
-        "AudioSource": "00000000-0000-4002-0054-040440c30b06",
-        "UsbSource": "00000000-0000-4002-0054-040440c30b06"
-      }]
-    }
-  }
-}
+{"Device": {"AvRouting": {"Routes": [{"VideoSource": "00000000-0000-4002-0054-040440c30b06"}]}}}
 ```
 
 Setting all three fields to an **empty string** (`""`) clears the route -
 confirmed live to cleanly blank the output (no video/audio routed) rather
 than erroring or leaving the last frame frozen. This is how the integration
-implements the select entity's "Off" option.
+implements the select entity's "Off" option - and unlike a normal source
+switch, "Off" always clears all three regardless of the follow-video
+setting below, since a deliberate blank shouldn't leave old audio playing.
+
+### `AvRouting/RouteControl` (GET, POST)
+
+`IsSecondaryAudioFollowsVideoEnabled` and `IsUsbFollowsVideoEnabled` (bools,
+both default `true` on every receiver checked), plus `IsLayer3Enabled` and
+`IsChangeUsbRemoteDeviceEnabled`. Confirmed live: with
+`IsSecondaryAudioFollowsVideoEnabled` on, POSTing only `VideoSource` to
+`AvRouting/Routes/0` is enough - `AudioSource` (and `UsbSource`, via its own
+flag) update on the device's own initiative. This is the real mechanism
+behind "audio follows video": the integration's main video-source select
+only ever writes `VideoSource`, and lets this flag decide whether audio
+tags along. Turning the flag off (via the `switch.<name>_audio_follows_video`
+entity) is what makes the independent `select.<name>_audio_source` entity
+meaningful - toggling it back on also immediately re-syncs `AudioSource` to
+match the current `VideoSource`, since the flag only affects *future* video
+switches, not retroactively.
 
 ### CEC - inbound listening, not outbound control
 
@@ -163,13 +202,16 @@ without the latency or missed-repeat-press risk of fixed-interval polling.
 
 ## Not implemented / out of scope
 
-- **Audio breakaway control** - switching a receiver's audio independently
-  of video (`DeviceSpecific.AudioMode`, the secondary `StreamReceive` slot).
-  `AvRouting` already keeps them in sync for the switching this integration
-  does; manually decoupling them is a separate feature.
+- **`DeviceSpecific.AudioMode` / the secondary `StreamReceive` slot** - the
+  *other*, lower-level audio-breakaway mechanism (distinct from
+  `AvRouting`'s `AudioSource`/`RouteControl`, which this integration does
+  use). Not exposed - `AvRouting` already covers independent audio routing
+  for the cases this integration targets.
 - **Outbound CEC control** (turning a display on/off, changing its volume
   from Home Assistant) - not requested; this integration is a CEC listener,
   not a CEC controller.
 - **Transmitter multicast configuration** (`StreamTransmit`) - read/write
-  support for changing what a transmitter sends isn't implemented; only
-  receivers are switched.
+  support for changing what a transmitter sends isn't implemented.
+- **USB routing control** - `UsbSource`/`IsUsbFollowsVideoEnabled` exist and
+  are readable, but there's no dedicated entity to route USB independently
+  of video (unlike audio, which got one at the user's request).

@@ -20,10 +20,18 @@ This entire addon is Claude Generated so use at your own risk.
   sensors, polled on a configurable interval.
 
 ### Receivers
-- **Stream Source** select entity - switches video, audio, and USB together
-  by routing to a source discovered elsewhere on the NVX network.
+- **Stream Source** select entity - routes to a source discovered elsewhere
+  on the NVX network.
+- **Audio Source** select entity - independent audio routing, for anyone not
+  running audio-follows-video.
+- **Audio Follows Video** switch - the on/off toggle for whether audio
+  automatically tracks the video source selection.
+- **Video Input** select entity, on receivers that have a local HDMI input -
+  switches between the network stream and a local source.
 
 ### Transmitters
+- **HDMI Input** select entity, on transmitters with more than one HDMI
+  input - switches which input is being encoded.
 - **CEC Command** event entity - listens for CEC commands a connected source
   device sends toward the display (e.g. an Apple TV, with its Volume Control
   setting on HDMI-CEC, sending volume/mute/power from its remote) and fires
@@ -72,11 +80,29 @@ during setup - there's no manual selector, so it can't be misconfigured.
   than a flattened active/inactive
 - `sensor.<name>_network_status` - connected/disconnected, with `ip_address` attribute
 
-### Select (receivers only)
+### Select (receivers)
 - `select.<name>_stream_source` - options are "Off" plus every source
-  currently discovered on the NVX network; selecting a source switches
-  video, audio, and USB together, and selecting "Off" clears the route to
-  blank the output
+  currently discovered on the NVX network; picking one switches video (and
+  audio/USB too, if their own follow-video flags are on - see the switch
+  below); "Off" always clears video, audio, and USB together to blank the
+  output regardless of that setting
+- `select.<name>_audio_source` - independent audio routing, for anyone not
+  running audio-follows-video. **Greyed out (unavailable) while "Audio
+  Follows Video" is on**, since the device owns audio routing itself in
+  that state
+- `select.<name>_video_input` - **only created on receivers that have a
+  local HDMI input** (e.g. a DM-NVX-350/352 used as a receiver) - switches
+  between the network Stream and each local HDMI input
+
+### Select (transmitters)
+- `select.<name>_hdmi_input` - **only created on transmitters with more
+  than one HDMI input** (e.g. a DM-NVX-352); a single-input transmitter has
+  nothing to switch between, so it gets no entity here
+
+### Switch (receivers)
+- `switch.<name>_audio_follows_video` - toggles whether audio automatically
+  tracks whatever video source is selected (the device's own default is
+  on). Turn it off to route audio independently via `select.<name>_audio_source`
 
 ### Event (transmitters only)
 - `event.<name>_cec_command` - fires `power_on` / `power_off` / `volume_up`
