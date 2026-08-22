@@ -10,6 +10,7 @@ crestron-nvx-homeassistant-addon/
 ├── README.md                        # Main documentation
 ├── VERSION                          # Version tracking
 ├── hacs.json                        # HACS metadata
+├── icon.png, icon@2x.png            # HACS store icon (original design, on-brand colors - not Crestron's logo)
 ├── info.md                          # HACS store description
 ├── INSTALLATION.md                  # Installation guide
 ├── API_DOCUMENTATION.md             # Verified Crestron DM NVX REST API reference
