@@ -22,10 +22,13 @@ crestron-nvx-homeassistant-addon/
         ├── strings.json             # UI strings
         ├── const.py                 # Constants
         ├── config_flow.py           # Config flow (UI setup, auto-detects device role)
-        ├── crestron_nvx_api.py      # Real DM NVX REST API client (auth, AvRouting, CEC decode)
+        ├── crestron_nvx_api.py      # Real DM NVX REST API client (auth, AvRouting, CEC decode, OSD)
+        ├── entity.py                # Shared device_info builder (real model, config URL, firmware)
         ├── sensor.py                # Status sensors (all devices)
         ├── select.py                # Stream/audio/HDMI-input selects (AvRouting + DeviceSpecific)
         ├── switch.py                # Audio Follows Video toggle (receivers)
+        ├── notify.py                # OSD message notify entity (receivers with OSD support)
+        ├── number.py                # OSD display duration setting (receivers with OSD support)
         ├── event.py                 # CEC command listener (transmitters, via Longpoll)
         └── translations/
             └── en.json              # English translations

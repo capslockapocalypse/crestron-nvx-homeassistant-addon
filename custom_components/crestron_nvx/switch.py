@@ -10,6 +10,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
+from .entity import crestron_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -49,12 +50,7 @@ class CrestronNVXAudioFollowsVideoSwitch(CoordinatorEntity, SwitchEntity):
         self._attr_name = f"{device.name} Audio Follows Video"
         self._attr_unique_id = f"{device.host}_audio_follows_video"
         self._attr_icon = "mdi:link-variant"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, device.host)},
-            "name": device.name,
-            "manufacturer": "Crestron",
-            "model": f"NVX {device.device_mode}",
-        }
+        self._attr_device_info = crestron_device_info(device)
 
     @property
     def is_on(self) -> bool:

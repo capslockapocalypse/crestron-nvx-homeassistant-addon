@@ -58,6 +58,11 @@ All paths below are relative to `/Device/`.
 
 ### `DeviceInfo` (GET only)
 `Model`, `SerialNumber`, `DeviceVersion` (firmware), `MacAddress`, `Name`.
+`Model`, `SerialNumber`, and `DeviceVersion` are cached on the device object
+at login and surfaced on each device's Home Assistant device page (real
+model like `"DM-NVX-E30"` rather than just its role, plus firmware/serial),
+so it's obvious which physical unit you're looking at when there are
+several.
 
 ### `DeviceSpecific/DeviceMode` (GET, POST)
 `"Transmitter"` or `"Receiver"` - read from the device itself rather than
@@ -163,6 +168,38 @@ entity) is what makes the independent `select.<name>_audio_source` entity
 meaningful - toggling it back on also immediately re-syncs `AudioSource` to
 match the current `VideoSource`, since the flag only affects *future* video
 switches, not retroactively.
+
+### `Osd` (GET, partial POST) - not supported on every model
+
+`Text` (string), `IsEnabled` (bool), plus device-configured `Location`,
+`XPosition`/`YPosition`, `BackgroundTransparency`. **Not every model has an
+OSD** - unsupported devices return the literal string
+`"UNSUPPORTED PROPERTY, CHECK REST API!!!"` in place of the object on `GET
+/Device/Osd`, rather than a normal HTTP error - confirmed live on a
+DM-NVX-D30 and DM-NVX-E30. A DM-NVX-350 receiver, and even a DM-NVX-352
+*while acting as a transmitter*, both returned real objects - OSD support
+tracks whether a device has its own local HDMI output, not its
+transmitter/receiver role. Support is checked once at login
+(`osd_supported` on the device) and gates whether the `notify`/`number`
+entities below are created at all, since there's no dedicated capability
+flag for this in `DeviceCapabilities`.
+
+**Read-after-write lag**: a `GET /Device/Osd` issued immediately after a
+successful `POST` (`StatusId: 0`) can return the *previous* value - a real
+device-side propagation delay, confirmed live (the actual on-screen text
+did update correctly; only the immediate follow-up read lagged by about one
+write cycle). Not an issue in practice since this integration never reads
+back after writing, but worth knowing if debugging via curl.
+
+```json
+POST /Device/Osd
+{"Device": {"Osd": {"Text": "Source: Laptop", "IsEnabled": true}}}
+```
+
+This integration exposes it as a `notify` entity (any text, via
+`notify.send_message`) that auto-clears itself via a Home Assistant-side
+timer after `number.<name>_osd_display_duration` seconds (a setting that
+lives entirely in this integration, not on the device) - see README.md.
 
 ### CEC - inbound listening, not outbound control
 

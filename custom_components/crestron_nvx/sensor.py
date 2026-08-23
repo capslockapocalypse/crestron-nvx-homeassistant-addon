@@ -8,6 +8,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
+from .entity import crestron_device_info
 
 
 async def async_setup_entry(
@@ -42,12 +43,7 @@ class CrestronNVXSensorBase(CoordinatorEntity, SensorEntity):
         """Initialize the sensor."""
         super().__init__(coordinator)
         self.device = device
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, device.host)},
-            "name": device.name,
-            "manufacturer": "Crestron",
-            "model": f"NVX {device.device_mode}",
-        }
+        self._attr_device_info = crestron_device_info(device)
 
 
 class CrestronNVXResolutionSensor(CrestronNVXSensorBase):

@@ -3,13 +3,15 @@
 
 Reads NVX_HOSTS / NVX_USERNAME / NVX_PASSWORD / NVX_VERIFY_SSL from .env in
 this directory. Exercises every read endpoint against each configured host,
-and (only if you pass --write and/or --cec) tests a real AvRouting source
-switch or the CEC long-poll listener interactively.
+and (only if you pass --write/--cec/--osd) tests a real AvRouting source
+switch, the CEC long-poll listener, or the OSD write/clear cycle
+interactively.
 
 Usage:
     python3 test_live.py            # read-only checks
     python3 test_live.py --write    # also test a live route switch
     python3 test_live.py --cec      # also test the CEC long-poll listener
+    python3 test_live.py --osd      # also test an OSD message write/clear
 """
 from __future__ import annotations
 
@@ -44,16 +46,12 @@ async def check_device(api: CrestronNVXAPI, host: str, username: str, password: 
         return
 
     print(f"  mode: {device.device_mode}  hdmi_in={device.hdmi_inputs} hdmi_out={device.hdmi_outputs}")
+    print(f"  model={device.model} serial={device.serial_number} fw={device.firmware_version}")
+    print(f"  osd_supported={device.osd_supported} osd_display_seconds={device.osd_display_seconds}")
 
     if device.hdmi_inputs > 0:
         ds = await device.get_device_specific()
         print(f"  VideoSource={ (ds or {}).get('VideoSource') } ActiveVideoSource={ (ds or {}).get('ActiveVideoSource') }")
-
-    info = await device.get_device_info()
-    if info:
-        print(f"  model={info.get('Model')} name={info.get('Name')} fw={info.get('DeviceVersion')}")
-    else:
-        print("  DeviceInfo: FAILED")
 
     video = await device.get_video_status()
     print(f"  video: {video}")
@@ -146,6 +144,32 @@ async def test_cec_listener(api: CrestronNVXAPI) -> None:
     print(f"Raw CEC message: {raw!r} -> event: {decode_cec_message(raw)}")
 
 
+async def test_osd(api: CrestronNVXAPI) -> None:
+    receivers = [d for d in api.devices.values() if d.is_receiver and d.osd_supported]
+    if not receivers:
+        print("\nNo OSD-capable receivers configured, skipping OSD test.")
+        return
+
+    print("\nOSD-capable receivers:")
+    for i, dev in enumerate(receivers):
+        print(f"  [{i}] {dev.name} ({dev.host})")
+    choice = input("Pick one to test (or blank to skip): ").strip()
+    if not choice:
+        return
+    device = receivers[int(choice)]
+
+    message = input("Message to show (blank for 'test_live.py'): ").strip() or "test_live.py"
+    ok = await device.set_osd(text=message, enabled=True)
+    print(f"set_osd(enabled=True) -> {'OK' if ok else 'FAILED'}")
+
+    seconds = device.osd_display_seconds
+    print(f"Waiting {seconds}s (device.osd_display_seconds) before clearing...")
+    await asyncio.sleep(seconds)
+
+    ok = await device.set_osd(enabled=False)
+    print(f"set_osd(enabled=False) -> {'OK' if ok else 'FAILED'}")
+
+
 async def main() -> None:
     env = load_env()
     hosts = [h.strip() for h in env.get("NVX_HOSTS", "").split(",") if h.strip()]
@@ -167,6 +191,9 @@ async def main() -> None:
 
         if "--cec" in sys.argv:
             await test_cec_listener(api)
+
+        if "--osd" in sys.argv:
+            await test_osd(api)
     finally:
         await api.close()
 

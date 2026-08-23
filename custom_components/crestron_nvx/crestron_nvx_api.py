@@ -94,6 +94,14 @@ class CrestronNVXDevice:
         self.device_mode: Optional[str] = None
         self.hdmi_inputs = 0
         self.hdmi_outputs = 0
+        self.osd_supported = False
+        self.model: Optional[str] = None
+        self.serial_number: Optional[str] = None
+        self.firmware_version: Optional[str] = None
+        # Not a device-side setting - purely how long this integration
+        # leaves OSD text on screen before auto-clearing it. Mutated
+        # directly by number.py's OSD Display Duration entity.
+        self.osd_display_seconds = 5
         self._session = session
         self._ssl = None if verify_ssl else False
         self._base_url = f"https://{host}"
@@ -143,6 +151,17 @@ class CrestronNVXDevice:
         self._authenticated = True
         self.device_mode = await self.get_device_mode()
         await self._load_port_config()
+        self.osd_supported = (await self.get_osd()) is not None
+        await self._load_device_info()
+
+    async def _load_device_info(self) -> None:
+        """Cache Model/SerialNumber/DeviceVersion - static for the device's lifetime."""
+        info = await self.get_device_info()
+        if not info:
+            return
+        self.model = info.get("Model")
+        self.serial_number = info.get("SerialNumber")
+        self.firmware_version = info.get("DeviceVersion")
 
     async def _load_port_config(self) -> None:
         """Cache HDMI input/output counts - static for the device's lifetime.
@@ -394,6 +413,33 @@ class CrestronNVXDevice:
         """
         body = {"Device": {"DeviceSpecific": {"VideoSource": value}}}
         return self._post_ok(await self._request("DeviceSpecific", method="POST", json_body=body))
+
+    async def get_osd(self) -> Optional[dict]:
+        """OSD state (Text, IsEnabled, Location, ...), or None if unsupported.
+
+        Not every model has an OSD - unsupported devices return the literal
+        string "UNSUPPORTED PROPERTY, CHECK REST API!!!" in place of the
+        object rather than a normal error, so a dict/non-dict check is what
+        distinguishes "supported but empty" from "not supported at all".
+        """
+        data = await self._request("Osd")
+        try:
+            osd = data["Device"]["Osd"]
+        except (KeyError, TypeError):
+            return None
+        return osd if isinstance(osd, dict) else None
+
+    async def set_osd(self, *, text: Optional[str] = None, enabled: Optional[bool] = None) -> bool:
+        """Set OSD text and/or enabled state - only the given fields are written."""
+        fields = {}
+        if text is not None:
+            fields["Text"] = text
+        if enabled is not None:
+            fields["IsEnabled"] = enabled
+        if not fields:
+            return True
+        body = {"Device": {"Osd": fields}}
+        return self._post_ok(await self._request("Osd", method="POST", json_body=body))
 
     @staticmethod
     def _post_ok(result: Optional[dict]) -> bool:

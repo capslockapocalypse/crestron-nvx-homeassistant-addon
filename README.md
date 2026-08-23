@@ -69,6 +69,10 @@ entry:
 
 Transmitter vs. receiver role is **detected automatically** from the device
 during setup - there's no manual selector, so it can't be misconfigured.
+Each device's page (Settings → Devices & Services → Crestron NVX → click the
+device) shows its real hardware model (e.g. "DM-NVX-E30"), firmware
+version, serial number, and a link straight to the device's own web UI - so
+if you have several devices it's obvious which one you're looking at.
 
 ## Entities
 
@@ -109,6 +113,20 @@ during setup - there's no manual selector, so it can't be misconfigured.
   / `volume_down` / `mute` when the connected source sends the matching CEC
   command
 
+### Notify and Number (devices with an on-screen display)
+Not every model has an OSD, and it's not receiver-exclusive - these are
+only created where the device actually supports one (confirmed live:
+`DM-NVX-350` and `DM-NVX-352` do - the 352 even in transmitter mode, since
+it has its own local HDMI output - `DM-NVX-E30` and `DM-NVX-D30` don't).
+- `notify.<name>_osd` - call `notify.send_message` with any text to show it
+  on the display's OSD; it auto-clears after `number.<name>_osd_display_duration`
+  seconds. Sending another message before that timer elapses replaces the
+  text and restarts the timer, so it doesn't flicker off between messages -
+  useful for e.g. showing which source or DSP mode is now active.
+- `number.<name>_osd_display_duration` - how many seconds a message stays
+  on screen (1-60, default 5). This is a Home Assistant-side setting, not
+  something read from the device, and persists across restarts.
+
 ## Automation example
 
 Trigger off the CEC event entity to react to a real Apple TV remote press:
@@ -148,6 +166,22 @@ automation:
           entity_id: select.bog_proj_dec_stream_source
         data:
           option: "BOG-PC-ENC"
+```
+
+Show a status message on the OSD when switching sources:
+
+```yaml
+automation:
+  - alias: "Show source name on OSD when switched"
+    trigger:
+      - platform: state
+        entity_id: select.bog_proj_dec_stream_source
+    action:
+      - service: notify.send_message
+        target:
+          entity_id: notify.bog_proj_dec_osd
+        data:
+          message: "Source: {{ trigger.to_state.state }}"
 ```
 
 ## Troubleshooting

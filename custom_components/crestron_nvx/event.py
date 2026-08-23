@@ -20,6 +20,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import CEC_EVENT_TYPES, DOMAIN
 from .crestron_nvx_api import decode_cec_message
+from .entity import crestron_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -57,12 +58,7 @@ class CrestronNVXCecEvent(EventEntity):
         self._attr_name = f"{device.name} CEC Command"
         self._attr_unique_id = f"{device.host}_cec_command"
         self._attr_icon = "mdi:remote"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, device.host)},
-            "name": device.name,
-            "manufacturer": "Crestron",
-            "model": f"NVX {device.device_mode}",
-        }
+        self._attr_device_info = crestron_device_info(device)
         self._task: asyncio.Task | None = None
 
     async def async_added_to_hass(self) -> None:

@@ -10,6 +10,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
+from .entity import crestron_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -61,12 +62,7 @@ class CrestronNVXStreamSelect(CoordinatorEntity, SelectEntity):
         self._attr_name = f"{device.name} Stream Source"
         self._attr_unique_id = f"{device.host}_stream_source"
         self._attr_icon = "mdi:video-input-hdmi"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, device.host)},
-            "name": device.name,
-            "manufacturer": "Crestron",
-            "model": f"NVX {device.device_mode}",
-        }
+        self._attr_device_info = crestron_device_info(device)
 
     def _streams(self) -> dict[str, dict]:
         return (self.coordinator.data or {}).get("discovered_streams") or {}
@@ -126,12 +122,7 @@ class CrestronNVXAudioSourceSelect(CoordinatorEntity, SelectEntity):
         self._attr_name = f"{device.name} Audio Source"
         self._attr_unique_id = f"{device.host}_audio_source"
         self._attr_icon = "mdi:volume-high"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, device.host)},
-            "name": device.name,
-            "manufacturer": "Crestron",
-            "model": f"NVX {device.device_mode}",
-        }
+        self._attr_device_info = crestron_device_info(device)
 
     def _streams(self) -> dict[str, dict]:
         return (self.coordinator.data or {}).get("discovered_streams") or {}
@@ -197,12 +188,7 @@ class CrestronNVXLocalSourceSelect(CoordinatorEntity, SelectEntity):
         self._attr_unique_id = f"{device.host}_video_input"
         self._attr_icon = "mdi:swap-horizontal"
         self._attr_options = ["Stream"] + [f"Local Input {i + 1}" for i in range(device.hdmi_inputs)]
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, device.host)},
-            "name": device.name,
-            "manufacturer": "Crestron",
-            "model": f"NVX {device.device_mode}",
-        }
+        self._attr_device_info = crestron_device_info(device)
 
     @property
     def current_option(self) -> str | None:
@@ -246,12 +232,7 @@ class CrestronNVXTransmitterInputSelect(CoordinatorEntity, SelectEntity):
         self._attr_unique_id = f"{device.host}_hdmi_input"
         self._attr_icon = "mdi:video-input-hdmi"
         self._attr_options = [f"Input {i + 1}" for i in range(device.hdmi_inputs)]
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, device.host)},
-            "name": device.name,
-            "manufacturer": "Crestron",
-            "model": f"NVX {device.device_mode}",
-        }
+        self._attr_device_info = crestron_device_info(device)
 
     @property
     def current_option(self) -> str | None:

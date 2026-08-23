@@ -14,7 +14,14 @@ from .crestron_nvx_api import CrestronNVXAPI, CrestronNVXDevice
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SELECT, Platform.EVENT, Platform.SWITCH]
+PLATFORMS: list[Platform] = [
+    Platform.SENSOR,
+    Platform.SELECT,
+    Platform.EVENT,
+    Platform.SWITCH,
+    Platform.NOTIFY,
+    Platform.NUMBER,
+]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
