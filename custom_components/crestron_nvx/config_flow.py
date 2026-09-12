@@ -41,7 +41,7 @@ class CrestronNVXConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> CrestronNVXOptionsFlow:
         """Get the options flow for this handler."""
-        return CrestronNVXOptionsFlow(config_entry)
+        return CrestronNVXOptionsFlow()
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -104,11 +104,14 @@ class CrestronNVXOptionsFlow(config_entries.OptionsFlow):
     generator (see crestron_nvx_api.py's get_preview_image), a separate,
     heavier feature from the JSON status endpoints everything else here
     uses, so it isn't enabled unconditionally for everyone.
-    """
 
-    def __init__(self, config_entry: ConfigEntry) -> None:
-        """Initialize the options flow."""
-        self.config_entry = config_entry
+    Deliberately has no __init__ - self.config_entry is provided
+    automatically by the base OptionsFlow class. Manually assigning it in
+    __init__ (the old pattern) is a hard error on current Home Assistant:
+    config_entry is now a read-only property with no setter, and setting it
+    raises AttributeError, which surfaces to the user as "Config flow could
+    not be loaded: 500 Internal Server Error" - confirmed live.
+    """
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
