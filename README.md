@@ -28,16 +28,28 @@ This entire addon is Claude Generated so use at your own risk.
   automatically tracks the video source selection.
 - **Video Input** select entity, on receivers that have a local HDMI input -
   switches between the network stream and a local source.
+- **HDMI Output** switch - force-blanks the physical output independent of
+  routing (the routed source resumes as soon as it's turned back on).
 
 ### Transmitters
 - **HDMI Input** select entity, on transmitters with more than one HDMI
   input - switches which input is being encoded.
+- **Test Pattern** select entity, on transmitters that support it - SMPTE
+  color bars, black/white fields, gradients, etc., for verifying the
+  downstream signal chain without a real source.
 - **CEC Command** event entity - listens for CEC commands a connected source
   device sends toward the display (e.g. an Apple TV, with its Volume Control
   setting on HDMI-CEC, sending volume/mute/power from its remote) and fires
   a Home Assistant event (`power_on`, `power_off`, `volume_up`,
   `volume_down`, `mute`) that automations can trigger on. This is a
   **listener**, not a controller - nothing is sent to the display.
+
+### Preview camera (opt-in, off by default)
+A `camera` entity showing a live JPEG snapshot of what the device currently
+shows, on any device that supports it (both roles). Off by default - fetching
+it is a heavier operation than the small JSON status calls everything else
+here uses. Enable it per-device-entry via **Settings → Devices & Services →
+Crestron NVX → Configure**.
 
 ## Installation
 
@@ -74,6 +86,12 @@ device) shows its real hardware model (e.g. "DM-NVX-E30"), firmware
 version, serial number, and a link straight to the device's own web UI - so
 if you have several devices it's obvious which one you're looking at.
 
+### Options
+
+Click **Configure** on a device's entry (Settings → Devices & Services →
+Crestron NVX) to enable the **preview camera** for that device - off by
+default (see Features above). Changing this reloads the entry.
+
 ## Entities
 
 ### Sensors (all devices)
@@ -102,11 +120,24 @@ if you have several devices it's obvious which one you're looking at.
 - `select.<name>_hdmi_input` - **only created on transmitters with more
   than one HDMI input** (e.g. a DM-NVX-352); a single-input transmitter has
   nothing to switch between, so it gets no entity here
+- `select.<name>_test_pattern` - **only created on transmitters that report
+  supported test patterns** (confirmed live: transmitter-only, absent on
+  every receiver tested). Options come from the device itself; "Off"
+  restores the real source
 
 ### Switch (receivers)
 - `switch.<name>_audio_follows_video` - toggles whether audio automatically
   tracks whatever video source is selected (the device's own default is
   on). Turn it off to route audio independently via `select.<name>_audio_source`
+- `switch.<name>_hdmi_output` - force-blanks the physical HDMI output when
+  off, independent of what's routed. Turning it back on resumes whatever was
+  already routed. Takes a couple of seconds to actually apply after toggling
+  (confirmed live - same propagation delay as the OSD)
+
+### Camera (opt-in, both roles)
+- `camera.<name>_preview` - a live JPEG snapshot of what the device
+  currently shows. Not created unless enabled in the entry's Options (see
+  Configuration above)
 
 ### Event (transmitters only)
 - `event.<name>_cec_command` - fires `power_on` / `power_off` / `volume_up`
@@ -199,6 +230,16 @@ they're actually transmitting and discovered on the network
 Audio → Volume Control** is set to use HDMI-CEC; by default it doesn't put
 remote presses on the CEC bus at all. For other sources, confirm they
 actually emit CEC (not every device does).
+
+**Entities went stale/unavailable after a device reboot or network blip** -
+fixed in 2.1.0. The device doesn't return a clean `403` for an
+invalid/expired session like Crestron's docs imply - it redirects to the
+login page, which was previously silently followed and mistaken for a
+successful response, so the integration never re-authenticated and stayed
+broken until manually reloaded. It now detects this and reconnects on its
+own (see API_DOCUMENTATION.md's Authentication section). If a device is
+offline when Home Assistant itself starts, the entry now retries setup
+automatically instead of failing outright.
 
 ## Support
 

@@ -15,6 +15,9 @@ Control your Crestron NVX video over IP transmitters and receivers directly from
 - 🎛️ **Stream Switching** - Dropdown to switch a receiver's video, audio, and USB together to any discovered source
 - 🎮 **CEC Listener** - fires Home Assistant events (power/volume/mute) when a connected source device (e.g. an Apple TV) sends CEC remote commands, for use as automation triggers
 - 🔄 **Automatic Discovery** - Receivers automatically discover available transmitter streams
+- 🎨 **Test Patterns** - put up SMPTE color bars, black/white fields, or gradients on a transmitter for verifying the signal chain without a real source
+- 🖥️ **HDMI Output Control** - force-blank a receiver's output independent of routing
+- 📷 **Preview Camera** (opt-in) - live JPEG snapshot of what a device currently shows
 - ⚡ **Configurable polling interval** (10-300 seconds) for status; CEC events are pushed in near-real-time via long-poll, not on the polling interval
 
 ### Supported Devices

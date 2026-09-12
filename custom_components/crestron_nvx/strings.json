@@ -22,5 +22,15 @@
     "abort": {
       "already_configured": "This device is already configured."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Crestron NVX Options",
+        "data": {
+          "enable_preview_camera": "Enable preview camera (fetches a live JPEG snapshot from each device)"
+        }
+      }
+    }
   }
 }

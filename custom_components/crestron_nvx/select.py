@@ -37,6 +37,8 @@ async def async_setup_entry(
                 entities.append(CrestronNVXLocalSourceSelect(coordinator, device))
         elif device.is_transmitter and device.hdmi_inputs > 1:
             entities.append(CrestronNVXTransmitterInputSelect(coordinator, device))
+        if device.test_patterns:
+            entities.append(CrestronNVXTestPatternSelect(coordinator, device))
 
     async_add_entities(entities)
 
@@ -250,3 +252,40 @@ class CrestronNVXTransmitterInputSelect(CoordinatorEntity, SelectEntity):
             await self.coordinator.async_request_refresh()
         else:
             _LOGGER.error("Failed to set %s HDMI input to: %s", self.device.host, option)
+
+
+class CrestronNVXTestPatternSelect(CoordinatorEntity, SelectEntity):
+    """Test pattern generator on a transmitter's output.
+
+    Only created when the device reports any TestPatternsSupported (a
+    transmitter-only feature - confirmed live absent on receivers). Options
+    are whatever the device itself lists (e.g. "SMPTE ColorBars", "Black",
+    "Grid"), read once at login since the supported set is static.
+    Overrides whatever's actually connected to the HDMI input - useful for
+    verifying the downstream signal chain without a real source. "Off"
+    restores the real source; confirmed live to apply immediately with no
+    read-after-write lag.
+    """
+
+    def __init__(self, coordinator, device):
+        """Initialize the select entity."""
+        super().__init__(coordinator)
+        self.device = device
+        self._attr_name = f"{device.name} Test Pattern"
+        self._attr_unique_id = f"{device.host}_test_pattern"
+        self._attr_icon = "mdi:contrast-box"
+        self._attr_options = device.test_patterns
+        self._attr_device_info = crestron_device_info(device)
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the currently active test pattern."""
+        return (self.coordinator.data or {}).get("test_pattern")
+
+    async def async_select_option(self, option: str) -> None:
+        """Set the active test pattern, or restore the real source with Off."""
+        success = await self.device.set_test_pattern(option)
+        if success:
+            await self.coordinator.async_request_refresh()
+        else:
+            _LOGGER.error("Failed to set %s test pattern to: %s", self.device.host, option)

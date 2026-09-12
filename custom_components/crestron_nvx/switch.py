@@ -25,11 +25,12 @@ async def async_setup_entry(
     coordinators = data["coordinators"]
     api = data["api"]
 
-    entities = [
-        CrestronNVXAudioFollowsVideoSwitch(coordinator, api.get_device(device_name))
-        for device_name, coordinator in coordinators.items()
-        if api.get_device(device_name).is_receiver
-    ]
+    entities = []
+    for device_name, coordinator in coordinators.items():
+        device = api.get_device(device_name)
+        if device.is_receiver:
+            entities.append(CrestronNVXAudioFollowsVideoSwitch(coordinator, device))
+            entities.append(CrestronNVXHdmiOutputSwitch(coordinator, device))
     async_add_entities(entities)
 
 
@@ -71,3 +72,44 @@ class CrestronNVXAudioFollowsVideoSwitch(CoordinatorEntity, SwitchEntity):
             await self.coordinator.async_request_refresh()
         else:
             _LOGGER.error("Failed to disable audio-follows-video on %s", self.device.host)
+
+
+class CrestronNVXHdmiOutputSwitch(CoordinatorEntity, SwitchEntity):
+    """Force-enable/disable a receiver's physical HDMI output.
+
+    Independent of AvRouting: this blanks the output itself (confirmed live
+    - the display goes to no-signal) rather than clearing the routed source,
+    so turning it back on resumes whatever was already routed. Confirmed
+    live that the device takes a couple of seconds to actually apply this -
+    same read-after-write lag as Osd - so don't expect the state to flip on
+    the very next poll immediately after toggling.
+    """
+
+    def __init__(self, coordinator, device):
+        """Initialize the switch."""
+        super().__init__(coordinator)
+        self.device = device
+        self._attr_name = f"{device.name} HDMI Output"
+        self._attr_unique_id = f"{device.host}_hdmi_output_enabled"
+        self._attr_icon = "mdi:video-input-hdmi"
+        self._attr_device_info = crestron_device_info(device)
+
+    @property
+    def is_on(self) -> bool:
+        """Return True when the HDMI output is enabled (not force-disabled)."""
+        video = (self.coordinator.data or {}).get("video") or {}
+        return not bool(video.get("output_disabled"))
+
+    async def async_turn_on(self, **kwargs) -> None:
+        """Re-enable the HDMI output."""
+        if await self.device.set_output_disabled(False):
+            await self.coordinator.async_request_refresh()
+        else:
+            _LOGGER.error("Failed to enable HDMI output on %s", self.device.host)
+
+    async def async_turn_off(self, **kwargs) -> None:
+        """Force-disable (blank) the HDMI output."""
+        if await self.device.set_output_disabled(True):
+            await self.coordinator.async_request_refresh()
+        else:
+            _LOGGER.error("Failed to disable HDMI output on %s", self.device.host)

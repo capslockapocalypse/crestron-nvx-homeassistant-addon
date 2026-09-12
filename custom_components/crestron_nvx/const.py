@@ -6,6 +6,7 @@ DOMAIN = "crestron_nvx"
 CONF_DEVICES = "devices"
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_VERIFY_SSL = "verify_ssl"
+CONF_ENABLE_PREVIEW_CAMERA = "enable_preview_camera"
 
 # Coordinator data keys
 ATTR_HORIZONTAL_RESOLUTION = "horizontal_resolution"

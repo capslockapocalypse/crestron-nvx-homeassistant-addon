@@ -40,6 +40,17 @@ _CEC_USER_CONTROL_EVENTS = {
     0x43: "mute",
 }
 
+# A stale/expired session doesn't get a clean 403 like the docs say - confirmed
+# live by logging out server-side and reusing the old cookies: the device
+# returns "301 Moved Permanently" / "Location: /userlogin.html" instead. If
+# that redirect is auto-followed (aiohttp's default), the response looks like
+# a normal 200 containing the login page's HTML rather than JSON, the session
+# never gets renewed, and every request fails the same way forever - this is
+# why the integration previously wouldn't recover after a disconnect.
+# Redirects must be disabled per-request (see _request) and treated the same
+# as 403 here.
+_REAUTH_STATUSES = frozenset({301, 302, 303, 307, 308, 403})
+
 
 class CrestronNVXError(Exception):
     """Base error for this client."""
@@ -95,6 +106,8 @@ class CrestronNVXDevice:
         self.hdmi_inputs = 0
         self.hdmi_outputs = 0
         self.osd_supported = False
+        self.test_patterns: list[str] = []
+        self.preview_supported = False
         self.model: Optional[str] = None
         self.serial_number: Optional[str] = None
         self.firmware_version: Optional[str] = None
@@ -152,6 +165,8 @@ class CrestronNVXDevice:
         self.device_mode = await self.get_device_mode()
         await self._load_port_config()
         self.osd_supported = (await self.get_osd()) is not None
+        await self._load_test_patterns()
+        await self._load_preview_supported()
         await self._load_device_info()
 
     async def _load_device_info(self) -> None:
@@ -178,6 +193,28 @@ class CrestronNVXDevice:
             return
         self.hdmi_inputs = port_config.get("NumberOfHdmiInputs", 0)
         self.hdmi_outputs = port_config.get("NumberOfHdmiOutputs", 0)
+
+    async def _load_test_patterns(self) -> None:
+        """Cache supported test pattern names - a transmitter-only feature.
+
+        Receivers return an empty {"Device": {}} for this path - confirmed
+        live - so an empty list here just means the device doesn't have it,
+        same as the missing-object convention used elsewhere in this API.
+        """
+        data = await self._request("TestPatternConfig")
+        try:
+            self.test_patterns = data["Device"]["TestPatternConfig"]["TestPatternsSupported"]
+        except (KeyError, TypeError):
+            self.test_patterns = []
+
+    async def _load_preview_supported(self) -> None:
+        """Cache whether this device exposes the /preview JPEG snapshot feature."""
+        data = await self._request("Preview")
+        try:
+            preview = data["Device"]["Preview"]
+        except (KeyError, TypeError):
+            preview = None
+        self.preview_supported = bool(preview)
 
     async def logout(self) -> None:
         """End the session. Best-effort; errors are not fatal."""
@@ -209,10 +246,15 @@ class CrestronNVXDevice:
                 url,
                 json=json_body,
                 ssl=self._ssl,
+                allow_redirects=False,
                 timeout=aiohttp.ClientTimeout(total=timeout),
             ) as response:
-                if response.status == 403 and _retry:
-                    _LOGGER.debug("Session expired for %s, re-authenticating", self.host)
+                if response.status in _REAUTH_STATUSES and _retry:
+                    _LOGGER.debug(
+                        "Session expired for %s (HTTP %s), re-authenticating",
+                        self.host,
+                        response.status,
+                    )
                     await self.login()
                     return await self._request(
                         path, method, json_body, timeout=timeout, _retry=False
@@ -286,6 +328,9 @@ class CrestronNVXDevice:
             "vertical_resolution": port.get("VerticalResolution"),
             "frames_per_second": port.get("FramesPerSecond"),
             "hdcp_state": hdmi.get("HdcpState"),
+            # Only meaningful on receivers - absent (None) on a transmitter's
+            # HDMI input, which has no IsOutputDisabled field at all.
+            "output_disabled": hdmi.get("IsOutputDisabled"),
         }
 
     async def get_ethernet_status(self) -> Optional[dict]:
@@ -440,6 +485,91 @@ class CrestronNVXDevice:
             return True
         body = {"Device": {"Osd": fields}}
         return self._post_ok(await self._request("Osd", method="POST", json_body=body))
+
+    async def get_test_pattern(self) -> Optional[str]:
+        """Currently active test pattern on Output1, or None if unsupported/unknown."""
+        data = await self._request("TestPatternConfig/Outputs/Output1/CurrentTestPattern")
+        try:
+            return data["Device"]["TestPatternConfig"]["Outputs"]["Output1"]["CurrentTestPattern"]
+        except (KeyError, TypeError):
+            return None
+
+    async def set_test_pattern(self, pattern: str) -> bool:
+        """Set the active test pattern on Output1 - "Off" restores the real source.
+
+        Confirmed live on a DM-NVX-E30 transmitter: applies immediately (no
+        read-after-write lag like Osd) and cleanly reverts.
+        """
+        body = {
+            "Device": {
+                "TestPatternConfig": {"Outputs": {"Output1": {"CurrentTestPattern": pattern}}}
+            }
+        }
+        return self._post_ok(
+            await self._request(
+                "TestPatternConfig/Outputs/Output1/CurrentTestPattern",
+                method="POST",
+                json_body=body,
+            )
+        )
+
+    async def set_output_disabled(self, disabled: bool) -> bool:
+        """Force-disable (blank) or re-enable a receiver's physical HDMI output.
+
+        Independent of AvRouting - this blanks the output itself rather than
+        clearing the routed source underneath, so the route is preserved and
+        resumes as soon as the output is re-enabled. Confirmed live on a
+        receiver: the write is accepted immediately but takes a couple of
+        seconds to actually propagate (same read-after-write lag as Osd) -
+        an immediate readback can still show the old state.
+        """
+        body = {
+            "Device": {
+                "AudioVideoInputOutput": {
+                    "Outputs": [{"Ports": [{"Hdmi": {"IsOutputDisabled": disabled}}]}]
+                }
+            }
+        }
+        return self._post_ok(
+            await self._request(
+                "AudioVideoInputOutput/Outputs/0/Ports/0/Hdmi/IsOutputDisabled",
+                method="POST",
+                json_body=body,
+            )
+        )
+
+    async def get_preview_image(self, size: str = "540px") -> Optional[bytes]:
+        """Fetch a JPEG snapshot of what this device currently shows.
+
+        Not under /Device/ like everything else - it's a plain authenticated
+        file at /preview/preview_<size>.jpeg on the same cookie session.
+        Confirmed live: 401 without valid session cookies, and a stale
+        session redirects to the login page the same way /Device/ requests
+        do (see _REAUTH_STATUSES on _request), so the same handling applies
+        here rather than reusing _request itself, which is JSON-only.
+        """
+        url = f"{self._base_url}/preview/preview_{size}.jpeg"
+        for attempt in (1, 2):
+            try:
+                async with self._session.get(
+                    url,
+                    ssl=self._ssl,
+                    allow_redirects=False,
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as response:
+                    if response.status in _REAUTH_STATUSES and attempt == 1:
+                        await self.login()
+                        continue
+                    if response.status != 200:
+                        return None
+                    return await response.read()
+            except TimeoutError:
+                _LOGGER.error("Timeout fetching preview image for %s", self.host)
+                return None
+            except aiohttp.ClientError as err:
+                _LOGGER.error("Error fetching preview image for %s: %s", self.host, err)
+                return None
+        return None
 
     @staticmethod
     def _post_ok(result: Optional[dict]) -> bool:

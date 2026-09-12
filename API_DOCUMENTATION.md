@@ -21,8 +21,18 @@ been installed.
    `TRACKID`, `iv`, `tag`, `userid`, `userstr`. All 6 must be sent on every
    subsequent request. **`AuthByPasswd` rotates on every response** - update
    it from each response before the next request, or the session breaks.
-4. `403 Forbidden` on any request means the session is invalid/expired -
-   re-run the login flow.
+4. A request made with an invalid/expired session does **not** reliably get
+   a clean `403 Forbidden` - confirmed live by logging out server-side and
+   reusing the old cookies: the device returned `301 Moved Permanently` with
+   `Location: /userlogin.html`. A client that auto-follows redirects (the
+   default for most HTTP clients, including aiohttp) sees this as a plain
+   `200 OK` containing the login page's HTML instead of JSON, never notices
+   the session died, and never re-authenticates - every subsequent request
+   then fails the same way forever. **Disable automatic redirect-following
+   on these requests** and treat any of `301/302/303/307/308/403` as
+   "re-run the login flow", not just `403`. This was the root cause of this
+   integration not recovering after a device restarted or a session was
+   otherwise invalidated - see `crestron_nvx_api.py`'s `_REAUTH_STATUSES`.
 5. `GET /logout` ends the session.
 
 ## Making requests
@@ -201,6 +211,68 @@ This integration exposes it as a `notify` entity (any text, via
 timer after `number.<name>_osd_display_duration` seconds (a setting that
 lives entirely in this integration, not on the device) - see README.md.
 
+### `TestPatternConfig` (GET, POST) - transmitter-only
+
+`Outputs/Output1/CurrentTestPattern` (string) and `TestPatternsSupported`
+(array of the valid values for it, e.g. `"Off"`, `"SMPTE ColorBars"`,
+`"Black"`, `"White"`, `"Vertical Lines"`, `"Grid"`, `"Color Bars"`,
+`"Gray Gradient"`, `"RGB Gradient"`, `"Frequency Adjust"`). Confirmed live on
+a DM-NVX-E30 transmitter: writing a pattern overrides whatever's on the
+HDMI input immediately (no read-after-write lag), and `"Off"` cleanly
+restores the real source. Confirmed absent on a receiver (`GET
+/Device/TestPatternConfig` returns `{"Device": {}}`, the same "not present"
+shape used elsewhere in this API) - this integration only creates the
+select entity for transmitters that report a non-empty
+`TestPatternsSupported`, cached once at login as `device.test_patterns`.
+
+### `AudioVideoInputOutput/Outputs/0/Ports/0/Hdmi/IsOutputDisabled` (GET, POST) - receivers
+
+Force-blanks the physical HDMI output independent of `AvRouting` - the
+routed source is preserved and resumes as soon as the output is
+re-enabled. Confirmed live on a receiver: `Transmitting` flips to `false`
+while disabled. **Has the same read-after-write lag as `Osd`** - an
+immediate readback after a successful (`StatusId: 0`) write returned the
+*previous* value; a write is reliably reflected after a couple of seconds,
+not immediately.
+
+### `Preview` (GET only) - live JPEG snapshot
+
+`ImageList.Image{1,2,3}` each describe a JPEG at 135/270/540px width, served
+from a **separate, non-`/Device/` path**: `https://<host>/preview/preview_
+{135,270,540}px.jpeg`. Confirmed live on both a transmitter and a receiver.
+Requires the same session cookies as everything else (confirmed `401`
+without them) - a stale session redirects the same way `/Device/` requests
+do (see the Authentication section above), so fetching this needs the same
+reauth-on-redirect handling, not just the JSON-shaped one `_request` uses.
+Presence is checked once at login (`Preview` returns `{"Device": {}}` on
+unsupported models, cached as `device.preview_supported`) since there's no
+dedicated capability flag for it. This integration exposes it as an opt-in
+`camera` entity (off by default - see README.md) rather than always-on,
+since it's a heavier feature than the small JSON status calls everything
+else here makes.
+
+### Output/stream "Volume" fields - investigated, not exposed
+
+Two different fields both look like a general HDMI-output volume control
+and are not:
+
+- `AudioVideoInputOutput/Outputs/0/Ports/0/Audio/Volume` - accepted an
+  out-of-range write (`9999`) with `StatusId: 0 "OK"` but the value never
+  changed on readback. Appears to be a no-op/read-only field on this
+  firmware rather than a real gain control.
+- `StreamReceive/Streams/N/Volume` - unlike the field above, this one
+  actually validates: writing `9999` correctly returned `StatusId: -1
+  "Value out of range"`. But every value tried *other than the current one*
+  (`100`, `50`, `1`, `-1`, `-80`, `-81`) was rejected the same way, even
+  though the field isn't at a documented boundary - it's gated by something
+  not yet understood, most likely tied to `DeviceSpecific.AudioMode`
+  (`"Insert"` on the receiver tested) and/or the per-stream `AudioMode`
+  (`"Automatic"`) rather than being freely adjustable. This is the same
+  "other, lower-level audio-breakaway mechanism" already called out as out
+  of scope below - a real volume entity here would need a dedicated
+  investigation into what state makes it writable, not a quick field
+  mapping.
+
 ### CEC - inbound listening, not outbound control
 
 There is no `CecControl.Type` preset object on this firmware (a direct GET
@@ -243,7 +315,9 @@ without the latency or missed-repeat-press risk of fixed-interval polling.
   *other*, lower-level audio-breakaway mechanism (distinct from
   `AvRouting`'s `AudioSource`/`RouteControl`, which this integration does
   use). Not exposed - `AvRouting` already covers independent audio routing
-  for the cases this integration targets.
+  for the cases this integration targets. This is also where the
+  `StreamReceive/Streams/N/Volume` field investigated above lives - see
+  "Output/stream 'Volume' fields" for why it wasn't turned into an entity.
 - **Outbound CEC control** (turning a display on/off, changing its volume
   from Home Assistant) - not requested; this integration is a CEC listener,
   not a CEC controller.

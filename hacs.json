@@ -3,6 +3,6 @@
   "content_in_root": false,
   "filename": "crestron_nvx",
   "render_readme": true,
-  "domains": ["sensor", "select", "event", "switch", "notify", "number"],
+  "domains": ["sensor", "select", "event", "switch", "notify", "number", "camera"],
   "homeassistant": "2023.1.0"
 }

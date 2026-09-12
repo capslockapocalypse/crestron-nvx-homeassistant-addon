@@ -7,10 +7,11 @@ from datetime import timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import CONF_SCAN_INTERVAL, CONF_VERIFY_SSL, DOMAIN
-from .crestron_nvx_api import CrestronNVXAPI, CrestronNVXDevice
+from .crestron_nvx_api import CrestronNVXAPI, CrestronNVXConnectionError, CrestronNVXDevice
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ PLATFORMS: list[Platform] = [
     Platform.SWITCH,
     Platform.NOTIFY,
     Platform.NUMBER,
+    Platform.CAMERA,
 ]
 
 
@@ -33,12 +35,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     api = CrestronNVXAPI(verify_ssl=verify_ssl)
 
     for device_config in devices_config:
-        await api.add_device(
-            host=device_config[CONF_HOST],
-            name=device_config["name"],
-            username=device_config[CONF_USERNAME],
-            password=device_config[CONF_PASSWORD],
-        )
+        try:
+            await api.add_device(
+                host=device_config[CONF_HOST],
+                name=device_config["name"],
+                username=device_config[CONF_USERNAME],
+                password=device_config[CONF_PASSWORD],
+            )
+        except CrestronNVXConnectionError as err:
+            # A device being unreachable at startup (still booting, briefly
+            # off the network, HA starting before it does) must not be a
+            # hard failure - ConfigEntryNotReady tells HA to keep retrying
+            # setup with its own backoff instead of leaving the whole entry
+            # (all configured devices, not just this one) permanently failed
+            # until someone notices and manually reloads it.
+            await api.close()
+            raise ConfigEntryNotReady(
+                f"Could not connect to {device_config[CONF_HOST]}: {err}"
+            ) from err
 
     scan_interval = entry.data.get(CONF_SCAN_INTERVAL, 30)
     coordinators: dict[str, CrestronNVXDataUpdateCoordinator] = {}
@@ -52,8 +66,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = {"api": api, "coordinators": coordinators}
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
     return True
+
+
+async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload the entry when its options change (e.g. the preview camera toggle)."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -86,6 +106,8 @@ class CrestronNVXDataUpdateCoordinator(DataUpdateCoordinator):
             }
             if self.device.hdmi_inputs > 0:
                 data["device_specific"] = await self.device.get_device_specific()
+            if self.device.test_patterns:
+                data["test_pattern"] = await self.device.get_test_pattern()
             if self.device.is_receiver:
                 data["discovered_streams"] = await self.device.get_discovered_streams()
                 data["route"] = await self.device.get_current_route()
